@@ -110,6 +110,7 @@ model LeaveRequest {
   startDate   DateTime
   endDate     DateTime
   reason      String
+  attachment  String?  // File path for bukti dukung (supporting document)
   status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
   approvedBy  String?
   approvedAt  DateTime?

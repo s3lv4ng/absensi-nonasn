@@ -53,6 +53,9 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
+  Upload,
+  Paperclip,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { LeaveRequest, LeaveType, LeaveStatus } from '@/types'
@@ -163,6 +166,8 @@ export function LeaveSubmission() {
   const [formStartDate, setFormStartDate] = useState('')
   const [formEndDate, setFormEndDate] = useState('')
   const [formReason, setFormReason] = useState('')
+  const [formAttachment, setFormAttachment] = useState<File | null>(null)
+  const [formAttachmentName, setFormAttachmentName] = useState('')
 
   // Stats
   const [stats, setStats] = useState({
@@ -211,6 +216,57 @@ export function LeaveSubmission() {
     fetchCustomLeaveTypes()
   }, [fetchLeaves, fetchCustomLeaveTypes])
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+
+    // Validate file type
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Format file tidak didukung. Gunakan JPG, PNG, PDF, atau DOC/DOCX')
+      return
+    }
+
+    setFormAttachment(file)
+    setFormAttachmentName(file.name)
+  }
+
+  const removeAttachment = () => {
+    setFormAttachment(null)
+    setFormAttachmentName('')
+  }
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Gagal mengupload file')
+      }
+      const data = await res.json()
+      return data.url
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal mengupload file')
+      return null
+    }
+  }
+
   const handleSubmit = async () => {
     if (!formType || !formStartDate || !formEndDate || !formReason.trim()) {
       toast.error('Semua field wajib diisi')
@@ -224,6 +280,17 @@ export function LeaveSubmission() {
 
     setIsSubmitting(true)
     try {
+      // Upload attachment if present
+      let attachmentUrl: string | null = null
+      if (formAttachment) {
+        attachmentUrl = await uploadFile(formAttachment)
+        if (formAttachment && !attachmentUrl) {
+          // Upload failed, error already shown by uploadFile
+          setIsSubmitting(false)
+          return
+        }
+      }
+
       const res = await fetch('/api/leaves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -232,6 +299,7 @@ export function LeaveSubmission() {
           startDate: formStartDate,
           endDate: formEndDate,
           reason: formReason.trim(),
+          attachment: attachmentUrl,
         }),
       })
 
@@ -250,6 +318,8 @@ export function LeaveSubmission() {
       setFormStartDate('')
       setFormEndDate('')
       setFormReason('')
+      setFormAttachment(null)
+      setFormAttachmentName('')
       setShowNewDialog(false)
       fetchLeaves()
     } catch (err) {
@@ -584,6 +654,19 @@ export function LeaveSubmission() {
                                   </div>
                                 )}
                               </div>
+                              {leave.attachment && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Paperclip className="size-3 text-[#1e40af] dark:text-blue-400" />
+                                  <a
+                                    href={leave.attachment}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-[#1e40af] dark:text-blue-400 hover:underline"
+                                  >
+                                    Lihat Bukti Dukung
+                                  </a>
+                                </div>
+                              )}
                             </div>
                           </motion.div>
                         )}
@@ -726,6 +809,43 @@ export function LeaveSubmission() {
                 rows={3}
                 className="border-blue-200 focus:border-[#1e40af] dark:border-blue-800 resize-none"
               />
+            </div>
+
+            {/* Bukti Dukung */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-[#1e40af] dark:text-blue-400">
+                Bukti Dukung (Opsional)
+              </Label>
+              {!formAttachment ? (
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx"
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer">
+                    <Upload className="size-5 text-[#1e40af] dark:text-blue-400" />
+                    <div>
+                      <p className="text-sm font-medium text-[#1e40af] dark:text-blue-400">Klik untuk upload</p>
+                      <p className="text-[10px] text-muted-foreground">JPG, PNG, PDF, DOC/DOCX (Maks. 5MB)</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  <Paperclip className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1 truncate">{formAttachmentName}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={removeAttachment}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Info note */}

@@ -18,9 +18,14 @@ import {
   Pencil,
   Trash2,
   BadgeCheck,
+  Upload,
+  Paperclip,
+  Tag,
+  X,
 } from 'lucide-react'
 
-import type { LeaveRequest, LeaveType, LeaveStatus, User } from '@/types'
+import type { LeaveRequest, LeaveType, LeaveStatus, User, LeaveTypeCategory } from '@/types'
+import { LeaveTypeManagement } from '@/components/admin/leave-type-management'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -519,6 +524,22 @@ function LeaveDetailDialog({
             </div>
           )}
 
+          {/* Bukti Dukung */}
+          {leave.attachment && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Bukti Dukung</p>
+              <a
+                href={leave.attachment}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm text-[#1e40af] dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              >
+                <Paperclip className="size-4" />
+                Lihat Bukti Dukung
+              </a>
+            </div>
+          )}
+
           {leave.approvedAt && (
             <div className="text-xs text-muted-foreground">
               Diproses pada: {formatDateLong(leave.approvedAt)}
@@ -578,6 +599,7 @@ function AddManualDialog({
   onSuccess: () => void
 }) {
   const [pegawaiList, setPegawaiList] = useState<User[]>([])
+  const [leaveTypeList, setLeaveTypeList] = useState<LeaveTypeCategory[]>([])
   const [loadingPegawai, setLoadingPegawai] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -586,6 +608,16 @@ function AddManualDialog({
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [attachmentName, setAttachmentName] = useState('')
+
+  // Default leave type config
+  const defaultTypes = [
+    { code: 'IZIN', label: 'Izin', color: '#3b82f6' },
+    { code: 'CUTI', label: 'Cuti', color: '#10b981' },
+    { code: 'SAKIT', label: 'Sakit', color: '#ef4444' },
+    { code: 'DINAS', label: 'Dinas', color: '#8b5cf6' },
+  ]
 
   // Fetch pegawai list when dialog opens
   useEffect(() => {
@@ -610,12 +642,66 @@ function AddManualDialog({
     return () => { cancelled = true }
   }, [open])
 
+  // Fetch leave types when dialog opens
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    async function fetchLeaveTypes() {
+      try {
+        const res = await fetch('/api/leave-types')
+        if (res.ok) {
+          const data = await res.json()
+          if (!cancelled) setLeaveTypeList(data.leaveTypes || [])
+        }
+      } catch {
+        // silently fail
+      }
+    }
+    fetchLeaveTypes()
+    return () => { cancelled = true }
+  }, [open])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+    setAttachmentFile(file)
+    setAttachmentName(file.name)
+  }
+
+  const removeAttachment = () => {
+    setAttachmentFile(null)
+    setAttachmentName('')
+  }
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Gagal mengupload file')
+      }
+      const data = await res.json()
+      return data.url
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal mengupload file')
+      return null
+    }
+  }
+
   const resetForm = () => {
     setUserId('')
     setType('IZIN')
     setStartDate('')
     setEndDate('')
     setReason('')
+    setAttachmentFile(null)
+    setAttachmentName('')
   }
 
   const handleSubmit = async () => {
@@ -638,6 +724,17 @@ function AddManualDialog({
 
     try {
       setSubmitting(true)
+
+      // Upload file if exists
+      let attachmentUrl: string | null = null
+      if (attachmentFile) {
+        attachmentUrl = await uploadFile(attachmentFile)
+        if (attachmentFile && !attachmentUrl) {
+          setSubmitting(false)
+          return
+        }
+      }
+
       const res = await fetch('/api/leaves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -647,6 +744,7 @@ function AddManualDialog({
           startDate,
           endDate,
           reason: reason.trim(),
+          attachment: attachmentUrl,
           status: 'APPROVED',
         }),
       })
@@ -672,7 +770,7 @@ function AddManualDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { resetForm(); onClose() } }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
             <Plus className="size-5" />
@@ -713,29 +811,25 @@ function AddManualDialog({
             <Label className="text-sm font-medium">Tipe</Label>
             <Select value={type} onValueChange={setType}>
               <SelectTrigger className="border-blue-200 dark:border-blue-800">
-                <SelectValue />
+                <SelectValue placeholder="Pilih tipe" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="IZIN">
-                  <span className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-blue-500" /> Izin
-                  </span>
-                </SelectItem>
-                <SelectItem value="CUTI">
-                  <span className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-emerald-500" /> Cuti
-                  </span>
-                </SelectItem>
-                <SelectItem value="SAKIT">
-                  <span className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-red-500" /> Sakit
-                  </span>
-                </SelectItem>
-                <SelectItem value="DINAS">
-                  <span className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-purple-500" /> Dinas
-                  </span>
-                </SelectItem>
+                {/* Default types */}
+                {defaultTypes.map((dt) => (
+                  <SelectItem key={dt.code} value={dt.code}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: dt.color }} /> {dt.label}
+                    </span>
+                  </SelectItem>
+                ))}
+                {/* Custom types from API */}
+                {leaveTypeList.filter((lt) => lt.isActive && !defaultTypes.some(d => d.code === lt.code)).map((lt) => (
+                  <SelectItem key={lt.code} value={lt.code}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: lt.color }} /> {lt.name}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -772,6 +866,41 @@ function AddManualDialog({
               rows={3}
               className="border-blue-200 dark:border-blue-800 resize-none"
             />
+          </div>
+
+          {/* Bukti Dukung */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Bukti Dukung (Opsional)</Label>
+            {!attachmentFile ? (
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx"
+                  onChange={handleFileSelect}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer">
+                  <Upload className="size-5 text-[#1e40af] dark:text-blue-400" />
+                  <div>
+                    <p className="text-sm font-medium text-[#1e40af] dark:text-blue-400">Klik untuk upload</p>
+                    <p className="text-[10px] text-muted-foreground">JPG, PNG, PDF, DOC/DOCX (Maks. 5MB)</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                <Paperclip className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1 truncate">{attachmentName}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={removeAttachment}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Status info */}
@@ -830,23 +959,92 @@ function EditDialog({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [type, setType] = useState<LeaveType>('IZIN')
+  const [type, setType] = useState<string>('IZIN')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [leaveTypeList, setLeaveTypeList] = useState<LeaveTypeCategory[]>([])
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [attachmentName, setAttachmentName] = useState('')
+  const [currentAttachment, setCurrentAttachment] = useState<string | null>(null)
+
+  const defaultTypes = [
+    { code: 'IZIN', label: 'Izin', color: '#3b82f6' },
+    { code: 'CUTI', label: 'Cuti', color: '#10b981' },
+    { code: 'SAKIT', label: 'Sakit', color: '#ef4444' },
+    { code: 'DINAS', label: 'Dinas', color: '#8b5cf6' },
+  ]
+
+  // Fetch leave types
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    async function fetchLeaveTypes() {
+      try {
+        const res = await fetch('/api/leave-types')
+        if (res.ok) {
+          const data = await res.json()
+          if (!cancelled) setLeaveTypeList(data.leaveTypes || [])
+        }
+      } catch {
+        // silently fail
+      }
+    }
+    fetchLeaveTypes()
+    return () => { cancelled = true }
+  }, [open])
 
   useEffect(() => {
     if (leave && open) {
       setType(leave.type as string)
-      // Convert ISO to yyyy-MM-dd for the date input
       const sd = new Date(leave.startDate)
       setStartDate(sd.toISOString().split('T')[0])
       const ed = new Date(leave.endDate)
       setEndDate(ed.toISOString().split('T')[0])
       setReason(leave.reason)
+      setCurrentAttachment(leave.attachment || null)
+      setAttachmentFile(null)
+      setAttachmentName('')
     }
   }, [leave, open])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+    setAttachmentFile(file)
+    setAttachmentName(file.name)
+  }
+
+  const removeAttachment = () => {
+    setAttachmentFile(null)
+    setAttachmentName('')
+  }
+
+  const removeCurrentAttachment = () => {
+    setCurrentAttachment(null)
+  }
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Gagal mengupload file')
+      }
+      const data = await res.json()
+      return data.url
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Gagal mengupload file')
+      return null
+    }
+  }
 
   const handleSubmit = async () => {
     if (!leave) return
@@ -865,6 +1063,18 @@ function EditDialog({
 
     try {
       setSubmitting(true)
+
+      // Handle attachment
+      let attachmentUrl = currentAttachment
+      if (attachmentFile) {
+        const uploaded = await uploadFile(attachmentFile)
+        if (!uploaded) {
+          setSubmitting(false)
+          return
+        }
+        attachmentUrl = uploaded
+      }
+
       const res = await fetch('/api/leaves', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -874,6 +1084,7 @@ function EditDialog({
           startDate,
           endDate,
           reason: reason.trim(),
+          attachment: attachmentUrl,
         }),
       })
 
@@ -894,7 +1105,7 @@ function EditDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
             <Pencil className="size-5" />
@@ -924,13 +1135,23 @@ function EditDialog({
             <Label className="text-sm font-medium">Tipe</Label>
             <Select value={type} onValueChange={setType}>
               <SelectTrigger className="border-blue-200 dark:border-blue-800">
-                <SelectValue />
+                <SelectValue placeholder="Pilih tipe" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="IZIN">Izin</SelectItem>
-                <SelectItem value="CUTI">Cuti</SelectItem>
-                <SelectItem value="SAKIT">Sakit</SelectItem>
-                <SelectItem value="DINAS">Dinas</SelectItem>
+                {defaultTypes.map((dt) => (
+                  <SelectItem key={dt.code} value={dt.code}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: dt.color }} /> {dt.label}
+                    </span>
+                  </SelectItem>
+                ))}
+                {leaveTypeList.filter((lt) => lt.isActive && !defaultTypes.some(d => d.code === lt.code)).map((lt) => (
+                  <SelectItem key={lt.code} value={lt.code}>
+                    <span className="flex items-center gap-2">
+                      <span className="size-2 rounded-full" style={{ backgroundColor: lt.color }} /> {lt.name}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -967,6 +1188,49 @@ function EditDialog({
               rows={3}
               className="border-blue-200 dark:border-blue-800 resize-none"
             />
+          </div>
+
+          {/* Bukti Dukung */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Bukti Dukung (Opsional)</Label>
+              {/* Current attachment */}
+              {currentAttachment && !attachmentFile && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 mb-2">
+                  <Paperclip className="size-4 text-[#1e40af] dark:text-blue-400" />
+                  <a href={currentAttachment} target="_blank" rel="noopener noreferrer" className="text-sm text-[#1e40af] dark:text-blue-400 hover:underline flex-1 truncate">
+                    File saat ini
+                  </a>
+                  <Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={removeCurrentAttachment}>
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+              {/* New attachment upload */}
+              {!attachmentFile ? (
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx"
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer">
+                    <Upload className="size-5 text-[#1e40af] dark:text-blue-400" />
+                    <div>
+                      <p className="text-sm font-medium text-[#1e40af] dark:text-blue-400">{currentAttachment ? 'Ganti file' : 'Klik untuk upload'}</p>
+                      <p className="text-[10px] text-muted-foreground">JPG, PNG, PDF, DOC/DOCX (Maks. 5MB)</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  <Paperclip className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1 truncate">{attachmentName}</span>
+                  <Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={removeAttachment}>
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
+              )}
           </div>
         </div>
 
@@ -1033,6 +1297,8 @@ export function LeaveManagement() {
   // Edit dialog
   const [editOpen, setEditOpen] = useState(false)
   const [editLeave, setEditLeave] = useState<LeaveRequest | null>(null)
+
+  const [activeMainTab, setActiveMainTab] = useState<string>('leaves')
 
   const fetchLeaves = useCallback(async () => {
     try {
@@ -1203,13 +1469,15 @@ export function LeaveManagement() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setAddOpen(true)}
-            className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/20"
-          >
-            <Plus className="size-4 mr-1.5" />
-            Tambah Manual
-          </Button>
+          {activeMainTab === 'leaves' && (
+            <Button
+              onClick={() => setAddOpen(true)}
+              className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/20"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Tambah Manual
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1224,93 +1492,115 @@ export function LeaveManagement() {
       </motion.div>
 
       {/* ================================================================= */}
-      {/* Tabs + Table                                                      */}
+      {/* Main Tabs: Pengajuan | Tipe Cuti/Izin                            */}
       {/* ================================================================= */}
       <motion.div variants={itemVariants}>
-        <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5">
-          <CardContent className="p-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-4 bg-blue-50/50 dark:bg-blue-900/20">
-                <TabsTrigger value="PENDING" className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 dark:data-[state=active]:bg-amber-900/40 dark:data-[state=active]:text-amber-300">
-                  <Clock className="size-3.5 mr-1" />
-                  Menunggu
-                  {pendingCount > 0 && (
-                    <Badge className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0 min-w-[18px] h-[18px] flex items-center justify-center">
-                      {pendingCount}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="APPROVED" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/40 dark:data-[state=active]:text-emerald-300">
-                  <CheckCircle2 className="size-3.5 mr-1" />
-                  Disetujui
-                </TabsTrigger>
-                <TabsTrigger value="REJECTED" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700 dark:data-[state=active]:bg-red-900/40 dark:data-[state=active]:text-red-300">
-                  <XCircle className="size-3.5 mr-1" />
-                  Ditolak
-                </TabsTrigger>
-                <TabsTrigger value="ALL" className="data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/40 dark:data-[state=active]:text-blue-300">
-                  <ClipboardCheck className="size-3.5 mr-1" />
-                  Semua
-                </TabsTrigger>
-              </TabsList>
+        <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
+          <TabsList className="bg-blue-50/50 dark:bg-blue-900/20">
+            <TabsTrigger value="leaves" className="data-[state=active]:bg-[#1e40af] data-[state=active]:text-white">
+              <ClipboardCheck className="size-3.5 mr-1.5" />
+              Pengajuan
+            </TabsTrigger>
+            <TabsTrigger value="types" className="data-[state=active]:bg-[#1e40af] data-[state=active]:text-white">
+              <Tag className="size-3.5 mr-1.5" />
+              Tipe Cuti / Izin
+            </TabsTrigger>
+          </TabsList>
 
-              {isLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-14 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <TabsContent value="PENDING">
-                    <LeaveTable
-                      leaves={leaves}
-                      onApprove={(l) => handleAction(l, 'APPROVED')}
-                      onReject={(l) => handleAction(l, 'REJECTED')}
-                      onViewDetail={openDetail}
-                      onEdit={openEdit}
-                      onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
-                      actionLoading={actionLoading}
-                    />
-                  </TabsContent>
-                  <TabsContent value="APPROVED">
-                    <LeaveTable
-                      leaves={leaves}
-                      onApprove={(l) => handleAction(l, 'APPROVED')}
-                      onReject={(l) => handleAction(l, 'REJECTED')}
-                      onViewDetail={openDetail}
-                      onEdit={openEdit}
-                      onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
-                      actionLoading={actionLoading}
-                    />
-                  </TabsContent>
-                  <TabsContent value="REJECTED">
-                    <LeaveTable
-                      leaves={leaves}
-                      onApprove={(l) => handleAction(l, 'APPROVED')}
-                      onReject={(l) => handleAction(l, 'REJECTED')}
-                      onViewDetail={openDetail}
-                      onEdit={openEdit}
-                      onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
-                      actionLoading={actionLoading}
-                    />
-                  </TabsContent>
-                  <TabsContent value="ALL">
-                    <LeaveTable
-                      leaves={leaves}
-                      onApprove={(l) => handleAction(l, 'APPROVED')}
-                      onReject={(l) => handleAction(l, 'REJECTED')}
-                      onViewDetail={openDetail}
-                      onEdit={openEdit}
-                      onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
-                      actionLoading={actionLoading}
-                    />
-                  </TabsContent>
-                </>
-              )}
-            </Tabs>
-          </CardContent>
-        </Card>
+          <TabsContent value="leaves" className="mt-4">
+            {/* ============================================================= */}
+            {/* Leave Status Tabs + Table                                     */}
+            {/* ============================================================= */}
+            <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5">
+              <CardContent className="p-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="mb-4 bg-blue-50/50 dark:bg-blue-900/20">
+                    <TabsTrigger value="PENDING" className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 dark:data-[state=active]:bg-amber-900/40 dark:data-[state=active]:text-amber-300">
+                      <Clock className="size-3.5 mr-1" />
+                      Menunggu
+                      {pendingCount > 0 && (
+                        <Badge className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0 min-w-[18px] h-[18px] flex items-center justify-center">
+                          {pendingCount}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="APPROVED" className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700 dark:data-[state=active]:bg-emerald-900/40 dark:data-[state=active]:text-emerald-300">
+                      <CheckCircle2 className="size-3.5 mr-1" />
+                      Disetujui
+                    </TabsTrigger>
+                    <TabsTrigger value="REJECTED" className="data-[state=active]:bg-red-100 data-[state=active]:text-red-700 dark:data-[state=active]:bg-red-900/40 dark:data-[state=active]:text-red-300">
+                      <XCircle className="size-3.5 mr-1" />
+                      Ditolak
+                    </TabsTrigger>
+                    <TabsTrigger value="ALL" className="data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/40 dark:data-[state=active]:text-blue-300">
+                      <ClipboardCheck className="size-3.5 mr-1" />
+                      Semua
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-14 w-full" />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <TabsContent value="PENDING">
+                        <LeaveTable
+                          leaves={leaves}
+                          onApprove={(l) => handleAction(l, 'APPROVED')}
+                          onReject={(l) => handleAction(l, 'REJECTED')}
+                          onViewDetail={openDetail}
+                          onEdit={openEdit}
+                          onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
+                          actionLoading={actionLoading}
+                        />
+                      </TabsContent>
+                      <TabsContent value="APPROVED">
+                        <LeaveTable
+                          leaves={leaves}
+                          onApprove={(l) => handleAction(l, 'APPROVED')}
+                          onReject={(l) => handleAction(l, 'REJECTED')}
+                          onViewDetail={openDetail}
+                          onEdit={openEdit}
+                          onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
+                          actionLoading={actionLoading}
+                        />
+                      </TabsContent>
+                      <TabsContent value="REJECTED">
+                        <LeaveTable
+                          leaves={leaves}
+                          onApprove={(l) => handleAction(l, 'APPROVED')}
+                          onReject={(l) => handleAction(l, 'REJECTED')}
+                          onViewDetail={openDetail}
+                          onEdit={openEdit}
+                          onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
+                          actionLoading={actionLoading}
+                        />
+                      </TabsContent>
+                      <TabsContent value="ALL">
+                        <LeaveTable
+                          leaves={leaves}
+                          onApprove={(l) => handleAction(l, 'APPROVED')}
+                          onReject={(l) => handleAction(l, 'REJECTED')}
+                          onViewDetail={openDetail}
+                          onEdit={openEdit}
+                          onDelete={(l) => { setDeleteLeave(l); setDeleteOpen(true) }}
+                          actionLoading={actionLoading}
+                        />
+                      </TabsContent>
+                    </>
+                  )}
+                </Tabs>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="types" className="mt-4">
+            <LeaveTypeManagement />
+          </TabsContent>
+        </Tabs>
       </motion.div>
 
       {/* ================================================================= */}

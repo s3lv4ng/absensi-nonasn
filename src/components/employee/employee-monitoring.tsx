@@ -390,6 +390,42 @@ export function EmployeeMonitoring() {
     return true
   })
 
+  // Sort: attended (by time asc) → on leave → belum absen (by name)
+  const sortedEmployees = [...filteredEmployees].sort((a, b) => {
+    const statusPriority: Record<string, number> = {
+      HADIR: 0,
+      TELAT: 0,
+      IZIN: 1,
+      CUTI: 1,
+      SAKIT: 1,
+      DINAS: 1,
+      BELUM_ABSEN: 2,
+      ALPHA: 2,
+    }
+
+    const priorityA = statusPriority[a.status] ?? 1
+    const priorityB = statusPriority[b.status] ?? 1
+
+    if (priorityA !== priorityB) return priorityA - priorityB
+
+    // Within same priority group
+    if (priorityA === 0) {
+      // Sort by masukTime ascending (earliest first)
+      if (a.masukTime && b.masukTime) return a.masukTime.localeCompare(b.masukTime)
+      if (a.masukTime) return -1
+      if (b.masukTime) return 1
+      return a.nama.localeCompare(b.nama)
+    }
+
+    if (priorityA === 2) {
+      // Sort belum absen alphabetically
+      return a.nama.localeCompare(b.nama)
+    }
+
+    // Leave types - sort alphabetically
+    return a.nama.localeCompare(b.nama)
+  })
+
   // ---- Format date display ----
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr) return ''
@@ -538,7 +574,7 @@ export function EmployeeMonitoring() {
       {/* ================================================================= */}
       <motion.div variants={itemVariants} className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          Menampilkan {filteredEmployees.length} dari {summary.total} pegawai
+          Menampilkan {sortedEmployees.length} dari {summary.total} pegawai
         </p>
         {isLoading && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -568,7 +604,7 @@ export function EmployeeMonitoring() {
               </TableHeader>
               <TableBody>
                 <AnimatePresence mode="popLayout">
-                  {filteredEmployees.length === 0 ? (
+                  {sortedEmployees.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="h-32 text-center">
                         <div className="flex flex-col items-center justify-center space-y-2">
@@ -582,7 +618,7 @@ export function EmployeeMonitoring() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredEmployees.map((emp, idx) => {
+                    sortedEmployees.map((emp, idx) => {
                       const config = statusConfig[emp.status]
                       const StatusIcon = config.icon
 
@@ -698,7 +734,7 @@ export function EmployeeMonitoring() {
       {/* Mobile Cards                                                      */}
       {/* ================================================================= */}
       <motion.div variants={itemVariants} className="md:hidden space-y-3">
-        {filteredEmployees.length === 0 ? (
+        {sortedEmployees.length === 0 ? (
           <Card className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm border-blue-100/50 dark:border-blue-900/30">
             <CardContent className="py-16 flex flex-col items-center space-y-2">
               <Users className="size-10 text-muted-foreground/30" />
@@ -713,7 +749,7 @@ export function EmployeeMonitoring() {
           <ScrollArea className="max-h-[calc(100vh-500px)]">
             <div className="space-y-3 pr-1">
               <AnimatePresence mode="popLayout">
-                {filteredEmployees.map((emp) => (
+                {sortedEmployees.map((emp) => (
                   <EmployeeCard key={emp.userId} employee={emp} />
                 ))}
               </AnimatePresence>

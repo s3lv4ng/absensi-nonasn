@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { userId, type, startDate, endDate, reason, status: reqStatus } = body
+    const { userId, type, startDate, endDate, reason, attachment, status: reqStatus } = body
 
     if (!type || !startDate || !endDate || !reason) {
       return NextResponse.json({ error: 'Semua field wajib diisi' }, { status: 400 })
@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         reason,
+        attachment: attachment || null,
         status: initialStatus,
         isManualEntry,
         ...(isManualEntry ? { approvedBy: authUser.userId, approvedAt: new Date() } : {}),
@@ -96,7 +97,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, status, type, startDate, endDate, reason } = body
+    const { id, status, type, startDate, endDate, reason, attachment } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID wajib diisi' }, { status: 400 })
@@ -116,6 +117,7 @@ export async function PUT(request: NextRequest) {
     if (startDate !== undefined) updateData.startDate = new Date(startDate)
     if (endDate !== undefined) updateData.endDate = new Date(endDate)
     if (reason !== undefined) updateData.reason = reason
+    if (attachment !== undefined) updateData.attachment = attachment
 
     const leave = await db.leaveRequest.update({
       where: { id },

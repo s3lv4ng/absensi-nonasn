@@ -121,6 +121,7 @@ export interface LeaveRequest {
   startDate: string
   endDate: string
   reason: string
+  attachment: string | null
   status: LeaveStatus
   approvedBy: string | null
   approvedAt: string | null
