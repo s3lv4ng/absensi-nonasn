@@ -21,6 +21,7 @@ import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Sidebar,
   SidebarContent,
@@ -50,12 +51,16 @@ interface NavItem {
   badge?: string
 }
 
-const adminNavItems: NavItem[] = [
+// Admin nav groups
+const mainItems: NavItem[] = [
   {
     title: 'Dashboard',
     view: 'admin-dashboard',
     icon: LayoutDashboard,
   },
+]
+
+const managementItems: NavItem[] = [
   {
     title: 'Kelola Pegawai',
     view: 'admin-employees',
@@ -70,13 +75,15 @@ const adminNavItems: NavItem[] = [
     title: 'Izin / Cuti / Dinas',
     view: 'admin-leaves',
     icon: ClipboardCheck,
-    badge: 'Baru',
   },
   {
     title: 'Tipe Cuti/Izin',
     view: 'admin-leave-types',
     icon: Tag,
   },
+]
+
+const reportItems: NavItem[] = [
   {
     title: 'Laporan',
     view: 'admin-reports',
@@ -87,6 +94,9 @@ const adminNavItems: NavItem[] = [
     view: 'admin-employee-report',
     icon: UserCheck,
   },
+]
+
+const settingItems: NavItem[] = [
   {
     title: 'Lokasi Kantor',
     view: 'admin-offices',
@@ -132,12 +142,51 @@ const employeeNavItems: NavItem[] = [
   },
 ]
 
+function NavItemRenderer({ item, isActive, onClick }: { item: NavItem; isActive: boolean; onClick: () => void }) {
+  const Icon = item.icon
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={onClick}
+        tooltip={item.title}
+        className={`
+          group relative transition-all duration-200
+          ${
+            isActive
+              ? 'bg-[#1e40af] text-white font-semibold shadow-lg shadow-blue-500/25 hover:bg-[#1e40af]/90 hover:text-white'
+              : 'hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-[#1e40af] dark:hover:text-blue-300'
+          }
+        `}
+      >
+        {isActive && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-white" />
+        )}
+        <Icon className={`size-4 ${isActive ? 'text-white' : ''}`} />
+        <span>{item.title}</span>
+        {item.badge && (
+          <Badge
+            variant="secondary"
+            className={`ml-auto text-[10px] px-1.5 py-0 h-4 ${
+              isActive
+                ? 'bg-white/20 text-white border-white/30'
+                : 'bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300 border-[#1e40af]/20'
+            }`}
+          >
+            {item.badge}
+          </Badge>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
 export function AppSidebar() {
   const { user, hasRole, logout } = useAuthStore()
   const { currentView, setCurrentView, sidebarOpen, setSidebarOpen } = useAppStore()
 
   const isAdmin = hasRole('ADMIN')
-  const navItems = isAdmin ? adminNavItems : employeeNavItems
 
   const handleNavClick = (view: AppView) => {
     setCurrentView(view)
@@ -156,7 +205,6 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="icon"
-      className="border-r-0"
     >
       {/* Header with branding */}
       <SidebarHeader className="p-4">
@@ -186,55 +234,111 @@ export function AppSidebar() {
 
       {/* Navigation */}
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
-            {isAdmin ? 'Menu Admin' : 'Menu Pegawai'}
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = currentView === item.view
-                const Icon = item.icon
+        <ScrollArea className="h-full">
+          {isAdmin ? (
+            <>
+              {/* Main */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                  Utama
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {mainItems.map((item) => (
+                      <NavItemRenderer
+                        key={item.view}
+                        item={item}
+                        isActive={currentView === item.view}
+                        onClick={() => handleNavClick(item.view)}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
 
-                return (
-                  <SidebarMenuItem key={item.view}>
-                    <SidebarMenuButton
-                      isActive={isActive}
+              <SidebarSeparator className="bg-blue-100/50 dark:bg-blue-900/30" />
+
+              {/* Management */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                  Manajemen
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {managementItems.map((item) => (
+                      <NavItemRenderer
+                        key={item.view}
+                        item={item}
+                        isActive={currentView === item.view}
+                        onClick={() => handleNavClick(item.view)}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              <SidebarSeparator className="bg-blue-100/50 dark:bg-blue-900/30" />
+
+              {/* Reports */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                  Laporan
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {reportItems.map((item) => (
+                      <NavItemRenderer
+                        key={item.view}
+                        item={item}
+                        isActive={currentView === item.view}
+                        onClick={() => handleNavClick(item.view)}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              <SidebarSeparator className="bg-blue-100/50 dark:bg-blue-900/30" />
+
+              {/* Settings */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                  Pengaturan
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {settingItems.map((item) => (
+                      <NavItemRenderer
+                        key={item.view}
+                        item={item}
+                        isActive={currentView === item.view}
+                        onClick={() => handleNavClick(item.view)}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </>
+          ) : (
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                Menu Pegawai
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {employeeNavItems.map((item) => (
+                    <NavItemRenderer
+                      key={item.view}
+                      item={item}
+                      isActive={currentView === item.view}
                       onClick={() => handleNavClick(item.view)}
-                      tooltip={item.title}
-                      className={`
-                        group relative transition-all duration-200
-                        ${
-                          isActive
-                            ? 'bg-[#1e40af] text-white font-semibold shadow-lg shadow-blue-500/25 hover:bg-[#1e40af]/90 hover:text-white'
-                            : 'hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-[#1e40af] dark:hover:text-blue-300'
-                        }
-                      `}
-                    >
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-white" />
-                      )}
-                      <Icon className={`size-4 ${isActive ? 'text-white' : ''}`} />
-                      <span>{item.title}</span>
-                      {item.badge && (
-                        <Badge
-                          variant="secondary"
-                          className={`ml-auto text-[10px] px-1.5 py-0 h-4 ${
-                            isActive
-                              ? 'bg-white/20 text-white border-white/30'
-                              : 'bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300 border-[#1e40af]/20'
-                          }`}
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </ScrollArea>
       </SidebarContent>
 
       <SidebarSeparator className="bg-blue-100 dark:bg-blue-900/40" />

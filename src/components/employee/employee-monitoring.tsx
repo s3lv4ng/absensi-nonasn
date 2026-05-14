@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Users, CheckCircle2, XCircle, Clock, AlertTriangle, LogIn, LogOut,
   Briefcase, Heart, Stethoscope, Plane, FileText, UserX, Loader2,
-  Search, RefreshCw, Filter, ChevronLeft, ChevronRight,
+  Search, RefreshCw, Filter, ChevronLeft, ChevronRight, MapPin, Navigation,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
 import type { EmployeeMonitorEntry } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -217,7 +220,7 @@ function SummaryCard({ label, count, icon: Icon, colorClass, bgClass, ringClass 
 // Employee Card (Mobile)
 // ---------------------------------------------------------------------------
 
-function EmployeeCard({ employee }: { employee: EmployeeMonitorEntry }) {
+function EmployeeCard({ employee, onClick }: { employee: EmployeeMonitorEntry; onClick: () => void }) {
   const config = statusConfig[employee.status]
   const StatusIcon = config.icon
 
@@ -226,7 +229,8 @@ function EmployeeCard({ employee }: { employee: EmployeeMonitorEntry }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm p-4 shadow-sm hover:shadow-md hover:bg-white/80 dark:hover:bg-gray-900/80 transition-all"
+      onClick={onClick}
+      className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm p-4 shadow-sm hover:shadow-md hover:bg-white/80 dark:hover:bg-gray-900/80 transition-all cursor-pointer"
     >
       <div className="flex items-start gap-3">
         {/* Avatar */}
@@ -320,6 +324,9 @@ export function EmployeeMonitoring() {
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+
+  // Selected employee for map dialog
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeMonitorEntry | null>(null)
 
   // Auto refresh
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -641,7 +648,8 @@ export function EmployeeMonitoring() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 10 }}
                           transition={{ delay: idx * 0.03, duration: 0.25 }}
-                          className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                          className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors cursor-pointer"
+                          onClick={() => setSelectedEmployee(emp)}
                         >
                           {/* Pegawai */}
                           <TableCell>
@@ -762,7 +770,7 @@ export function EmployeeMonitoring() {
             <div className="space-y-3 pr-1">
               <AnimatePresence mode="popLayout">
                 {sortedEmployees.map((emp) => (
-                  <EmployeeCard key={emp.userId} employee={emp} />
+                  <EmployeeCard key={emp.userId} employee={emp} onClick={() => setSelectedEmployee(emp)} />
                 ))}
               </AnimatePresence>
             </div>
@@ -836,6 +844,120 @@ export function EmployeeMonitoring() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ================================================================= */}
+      {/* Map Dialog                                                        */}
+      {/* ================================================================= */}
+      <Dialog open={!!selectedEmployee} onOpenChange={(open) => !open && setSelectedEmployee(null)}>
+        <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+          <DialogHeader>
+            <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
+              <MapPin className="size-5" />
+              Lokasi Absensi - {selectedEmployee?.nama}
+            </DialogTitle>
+            <DialogDescription>
+              Detail lokasi absensi {selectedEmployee?.nama}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEmployee && (
+            <div className="space-y-4">
+              {/* Employee Info */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-900/30">
+                <Avatar className="size-11 ring-2 ring-blue-100 dark:ring-blue-900/40 shrink-0">
+                  <AvatarImage src={selectedEmployee.photo ?? undefined} alt={selectedEmployee.nama} />
+                  <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 font-bold text-xs">
+                    {getInitials(selectedEmployee.nama)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-foreground">{selectedEmployee.nama}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{selectedEmployee.nip}</p>
+                  <Badge variant="outline" className={`text-[10px] px-2 py-0 mt-1 ${statusConfig[selectedEmployee.status].color} ${statusConfig[selectedEmployee.status].bgColor}`}>
+                    {statusConfig[selectedEmployee.status].label}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Absen Masuk */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Absen Masuk</p>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100/50 dark:border-emerald-900/30">
+                  <div>
+                    <p className="text-sm font-semibold">{selectedEmployee.masukTime ? formatTime(selectedEmployee.masukTime) : 'Belum absen'}</p>
+                    {selectedEmployee.masukLat != null && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {selectedEmployee.masukLat.toFixed(6)}, {selectedEmployee.masukLng!.toFixed(6)}
+                      </p>
+                    )}
+                  </div>
+                  {selectedEmployee.masukLat != null && (
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedEmployee.masukLat},${selectedEmployee.masukLng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs font-medium transition-colors"
+                    >
+                      <Navigation className="size-3" />
+                      Maps
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Absen Pulang */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Absen Pulang</p>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100/50 dark:border-orange-900/30">
+                  <div>
+                    <p className="text-sm font-semibold">{selectedEmployee.pulangTime ? formatTime(selectedEmployee.pulangTime) : 'Belum absen'}</p>
+                    {selectedEmployee.pulangLat != null && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {selectedEmployee.pulangLat.toFixed(6)}, {selectedEmployee.pulangLng!.toFixed(6)}
+                      </p>
+                    )}
+                  </div>
+                  {selectedEmployee.pulangLat != null && (
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedEmployee.pulangLat},${selectedEmployee.pulangLng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs font-medium transition-colors"
+                    >
+                      <Navigation className="size-3" />
+                      Maps
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Map Preview */}
+              {(() => {
+                const lat = selectedEmployee.pulangLat ?? selectedEmployee.masukLat
+                const lng = selectedEmployee.pulangLng ?? selectedEmployee.masukLng
+                if (lat != null) {
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Peta Lokasi</p>
+                      <div className="rounded-xl overflow-hidden border border-blue-100/50 dark:border-blue-900/30">
+                        <iframe
+                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng!-0.005}%2C${lat!-0.003}%2C${lng!+0.005}%2C${lat!+0.003}&layer=mapnik&marker=${lat}%2C${lng}`}
+                          width="100%"
+                          height="250"
+                          style={{ border: 0 }}
+                          loading="lazy"
+                          title="Lokasi Absensi"
+                        />
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

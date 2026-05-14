@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
         type: true,
         status: true,
         createdAt: true,
+        latitude: true,
+        longitude: true,
       },
     })
 
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Build lookup maps for quick access
-    const attendanceByUser = new Map<string, Map<string, { createdAt: Date; status: string }>>()
+    const attendanceByUser = new Map<string, Map<string, { createdAt: Date; status: string; latitude: number; longitude: number }> >()
 
     for (const att of todayAttendances) {
       if (!attendanceByUser.has(att.userId)) {
@@ -95,6 +97,8 @@ export async function GET(request: NextRequest) {
       attendanceByUser.get(att.userId)!.set(att.type, {
         createdAt: att.createdAt,
         status: att.status,
+        latitude: att.latitude,
+        longitude: att.longitude,
       })
     }
 
@@ -180,10 +184,10 @@ export async function GET(request: NextRequest) {
         summary.belumAbsen++
       }
 
-      // Format times as HH:MM:SS strings
+      // Format times as ISO strings so the frontend can parse them with new Date()
       const formatTime = (date: Date | null): string | null => {
         if (!date) return null
-        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`
+        return date.toISOString()
       }
 
       return {
@@ -198,6 +202,10 @@ export async function GET(request: NextRequest) {
         pulangTime: formatTime(pulangRecord?.createdAt ?? null),
         leaveType,
         leaveStatus,
+        masukLat: masukRecord?.latitude ?? null,
+        masukLng: masukRecord?.longitude ?? null,
+        pulangLat: pulangRecord?.latitude ?? null,
+        pulangLng: pulangRecord?.longitude ?? null,
       }
     })
 

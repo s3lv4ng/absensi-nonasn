@@ -70,7 +70,6 @@ export async function GET(request: NextRequest) {
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day)
-      const nextDate = new Date(year, month - 1, day + 1)
 
       const dayName = date.toLocaleDateString('id-ID', { weekday: 'short' })
       const isWeekend = date.getDay() === 0 || date.getDay() === 6
@@ -78,19 +77,20 @@ export async function GET(request: NextRequest) {
       // Find MASUK and PULANG for this day
       const dayAttendances = attendances.filter((a) => {
         const aDate = new Date(a.createdAt)
-        return aDate >= date && aDate < nextDate
+        return aDate.getFullYear() === year && aDate.getMonth() === month - 1 && aDate.getDate() === day
       })
 
       const masuk = dayAttendances.find((a) => a.type === 'MASUK')
       const pulang = dayAttendances.find((a) => a.type === 'PULANG')
 
       // Check if on approved leave
+      const dateToCheck = new Date(year, month - 1, day)
       const onLeave = leaves.some((l) => {
         const start = new Date(l.startDate)
         const end = new Date(l.endDate)
         start.setHours(0, 0, 0, 0)
         end.setHours(23, 59, 59, 999)
-        return date >= start && date <= end
+        return dateToCheck >= start && dateToCheck <= end
       })
 
       // Determine status
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
           const end = new Date(l.endDate)
           start.setHours(0, 0, 0, 0)
           end.setHours(23, 59, 59, 999)
-          return date >= start && date <= end
+          return dateToCheck >= start && dateToCheck <= end
         })
         if (leave) {
           status = leave.type
@@ -121,10 +121,16 @@ export async function GET(request: NextRequest) {
         dayName,
         isWeekend,
         masukTime: masuk
-          ? new Date(masuk.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          ? (() => {
+              const d = new Date(masuk.createdAt)
+              return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+            })()
           : null,
         pulangTime: pulang
-          ? new Date(pulang.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          ? (() => {
+              const d = new Date(pulang.createdAt)
+              return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+            })()
           : null,
         status,
         leaveType,

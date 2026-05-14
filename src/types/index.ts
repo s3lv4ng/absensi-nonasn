@@ -228,4 +228,8 @@ export interface EmployeeMonitorEntry {
   pulangTime: string | null
   leaveType: string | null
   leaveStatus: string | null
+  masukLat: number | null
+  masukLng: number | null
+  pulangLat: number | null
+  pulangLng: number | null
 }

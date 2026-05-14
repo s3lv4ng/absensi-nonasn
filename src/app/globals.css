@@ -169,6 +169,30 @@
   background: oklch(0.55 0.15 260);
 }
 
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0.02 260);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.15 260);
+}
+
+/* Scrollbar for Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.7 0.02 250) transparent;
+}
+
+.dark * {
+  scrollbar-color: oklch(0.4 0.02 260) transparent;
+}
+
 /* Camera overlay animation */
 @keyframes scanning {
   0% { top: 0; }

@@ -160,3 +160,88 @@ Stage Summary:
 - All API routes preserve backward compatibility (page/limit default to 1/20, existing data key names preserved)
 - Pagination controls only appear when totalPages > 1
 - Lint passes with no errors
+
+---
+Task ID: 1
+Agent: fix-monitor-date-map-dialog
+Task: Fix Invalid Date on Pegawai Monitor + Add latitude/longitude to API + Add clickable card with Map dialog
+
+Work Log:
+- Fixed Monitor API `formatTime` function to return ISO date strings (`date.toISOString()`) instead of HH:MM:SS time-only strings, which caused "Invalid Date" on the frontend when parsed with `new Date()`
+- Added `latitude` and `longitude` fields to the attendance query select in the monitor API
+- Updated `attendanceByUser` Map type to include `latitude: number; longitude: number` alongside `createdAt` and `status`
+- Added `masukLat`, `masukLng`, `pulangLat`, `pulangLng` fields to the employee response object
+- Updated `EmployeeMonitorEntry` TypeScript interface with `masukLat`, `masukLng`, `pulangLat`, `pulangLng` (all `number | null`)
+- Updated `employee-monitoring.tsx`:
+  - Added `MapPin`, `Navigation` to lucide-react imports
+  - Added `Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription` imports from `@/components/ui/dialog`
+  - Added `selectedEmployee` state (`useState<EmployeeMonitorEntry | null>(null)`)
+  - Made `EmployeeCard` accept `onClick` prop, added `cursor-pointer` class and `onClick` handler
+  - Made desktop table rows clickable with `cursor-pointer` class and `onClick={() => setSelectedEmployee(emp)}`
+  - Added Dialog component showing employee details with:
+    - Employee info (avatar, name, NIP, status badge)
+    - Absen Masuk section with time, coordinates, and Google Maps link
+    - Absen Pulang section with time, coordinates, and Google Maps link
+    - OpenStreetMap embedded iframe preview of the latest location
+- Fixed generic type parsing issue: `Map<string, Map<string, { ... }>>()` → `Map<string, Map<string, { ... }> >()` to avoid `>>` being parsed as right-shift operator
+- Fixed missing closing brace in mobile cards map: `))` → `))}`
+- All lint checks pass with no errors
+- Dev server compiles and runs without errors
+
+Stage Summary:
+- Invalid Date issue fixed by returning ISO strings from API instead of time-only strings
+- Latitude/longitude data now exposed in monitor API response and TypeScript types
+- Employee cards and table rows are clickable, opening a Dialog with attendance location details
+- Dialog shows Google Maps links and embedded OpenStreetMap preview
+- Lint passes with no errors
+
+---
+Task ID: 2
+Agent: ui-cleanup-agent
+Task: Clean up sidebar, add scrollbar styling, fix Laporan Pegawai, and general UI cleanup
+
+Work Log:
+- Reorganized admin sidebar navigation into 4 logical groups with SidebarGroup/SidebarGroupLabel and SidebarSeparator: "Utama" (Dashboard), "Manajemen" (Kelola Pegawai, Monitoring Absensi, Izin/Cuti/Dinas, Tipe Cuti/Izin), "Laporan" (Laporan, Laporan Pegawai), "Pengaturan" (Lokasi Kantor, Jam Kerja, Pengaturan)
+- Removed "Baru" badge from "Izin / Cuti / Dinas" sidebar item
+- Removed `border-r-0` className from Sidebar component to restore visual border separator
+- Added `ScrollArea` wrapper inside `SidebarContent` for overflow handling when many nav items exist
+- Extracted `NavItemRenderer` component to reduce duplication in sidebar rendering
+- Employee sidebar kept as single group "Menu Pegawai" (no changes needed)
+- Added CSS rules to globals.css: smooth scrolling (`html { scroll-behavior: smooth }`), dark mode scrollbar styling (`.dark ::-webkit-scrollbar-thumb`), Firefox thin scrollbar (`scrollbar-width: thin`, `scrollbar-color`)
+- Fixed Laporan Pegawai API date comparison: replaced `aDate >= date && aDate < nextDate` with `aDate.getFullYear() === year && aDate.getMonth() === month - 1 && aDate.getDate() === day` to avoid UTC/local timezone mismatch
+- Fixed leave date comparison: created `dateToCheck = new Date(year, month - 1, day)` consistently for both `onLeave` check and `leave.find` to avoid using the `date` variable which was also used for dayName/isWeekend
+- Removed unused `nextDate` variable from the employee report route
+- Fixed time formatting: replaced `toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })` with consistent `HH:MM` format using `d.getHours()` and `d.getMinutes()` with padStart, avoiding locale-dependent output
+- Verified all admin module ScrollArea components have consistent max-height and overflow handling
+- Lint passes with no errors, dev server compiles without errors
+
+Stage Summary:
+- Sidebar now has organized groups (Utama/Manajemen/Laporan/Pengaturan) with separators and ScrollArea
+- Scrollbar styling works consistently across light/dark modes and browsers (Chrome + Firefox)
+- Laporan Pegawai API now correctly handles timezone-safe date comparisons and consistent time formatting
+- No visual regressions; all existing ScrollArea components verified as consistent
+
+---
+Task ID: 3
+Agent: Main
+Task: Fix Invalid Date, Add Map Dialog, Clean up Sidebar, Fix Reports, Add Scrollbar Styling
+
+Work Log:
+- Fixed Invalid Date on Pegawai Monitor by changing API formatTime to return ISO strings instead of HH:MM:SS
+- Added latitude/longitude fields to monitor API response (masukLat, masukLng, pulangLat, pulangLng)
+- Updated EmployeeMonitorEntry TypeScript type with lat/lng fields
+- Added clickable employee cards/table rows on Pegawai Monitor
+- Added Map Dialog with OpenStreetMap iframe preview and Google Maps links for both Masuk and Pulang locations
+- Reorganized sidebar into 4 logical groups: Utama, Manajemen, Laporan, Pengaturan
+- Removed "Baru" badge from sidebar, removed border-r-0, added ScrollArea for overflow
+- Added smooth scrolling, dark mode scrollbar, and Firefox scrollbar support to globals.css
+- Fixed Laporan Pegawai API date comparison using getFullYear/getMonth/getDate instead of UTC-unsafe comparison
+- Fixed time formatting in employee report to use consistent HH:MM format
+- All changes pass lint with no errors
+
+Stage Summary:
+- Invalid Date issue fixed - API now returns ISO date strings that parse correctly
+- Map dialog works on employee monitor with OpenStreetMap iframe + Google Maps links
+- Sidebar is now organized with logical groupings
+- Scrollbar styling improved for all browsers
+- Employee report date handling is timezone-safe
