@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 
+const MATCH_THRESHOLD = 0.6
+
+function calculateEuclideanDistance(desc1: number[], desc2: number[]): number {
+  if (desc1.length !== desc2.length) return Infinity
+  let sum = 0
+  for (let i = 0; i < desc1.length; i++) {
+    const diff = desc1[i] - desc2[i]
+    sum += diff * diff
+  }
+  return Math.sqrt(sum)
+}
+
 // Get current user's face descriptor
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +84,31 @@ export async function PUT(request: NextRequest) {
           { error: 'Wajah sudah terdaftar. Hubungi admin untuk mereset data wajah.' },
           { status: 400 }
         )
+      }
+    }
+
+    // Check for duplicate face across other accounts
+    if (faceDescriptor) {
+      const newDescriptor = JSON.parse(faceDescriptor) as number[]
+
+      const usersWithFaces = await db.user.findMany({
+        where: {
+          faceDescriptor: { not: null },
+          id: { not: targetUserId },
+        },
+        select: { id: true, nama: true, faceDescriptor: true },
+      })
+
+      for (const existingUser of usersWithFaces) {
+        if (!existingUser.faceDescriptor) continue
+        const existingDescriptor = JSON.parse(existingUser.faceDescriptor) as number[]
+        const distance = calculateEuclideanDistance(newDescriptor, existingDescriptor)
+        if (distance < MATCH_THRESHOLD) {
+          return NextResponse.json(
+            { error: `Wajah ini sudah terdaftar pada akun lain (${existingUser.nama}). Satu wajah hanya boleh didaftarkan pada satu akun.` },
+            { status: 400 }
+          )
+        }
       }
     }
 

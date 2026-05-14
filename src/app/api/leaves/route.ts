@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const type = searchParams.get('type')
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = {}
     if (authUser.role !== 'ADMIN') {
@@ -24,25 +27,35 @@ export async function GET(request: NextRequest) {
       where.type = type
     }
 
-    const leaves = await db.leaveRequest.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            nip: true,
-            nama: true,
-            email: true,
-            photo: true,
-            unitKerja: true,
-            jabatan: true,
+    const [leaves, total] = await Promise.all([
+      db.leaveRequest.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              nip: true,
+              nama: true,
+              email: true,
+              photo: true,
+              unitKerja: true,
+              jabatan: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.leaveRequest.count({ where }),
+    ])
 
-    return NextResponse.json({ leaves })
+    return NextResponse.json({
+      leaves,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    })
   } catch (error) {
     console.error('Leaves GET error:', error)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })

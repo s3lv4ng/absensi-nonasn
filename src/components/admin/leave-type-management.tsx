@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   Tag, Plus, Pencil, Trash2, CheckCircle2, XCircle, Loader2, Palette, RefreshCw, Eye, EyeOff,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -248,6 +249,12 @@ export function LeaveTypeManagement() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const limit = 20
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingLeaveType, setEditingLeaveType] = useState<LeaveTypeCategory | null>(null)
@@ -264,7 +271,11 @@ export function LeaveTypeManagement() {
       setIsLoading(true)
       setError(null)
 
-      const res = await fetch('/api/leave-types')
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('limit', String(limit))
+
+      const res = await fetch(`/api/leave-types?${params.toString()}`)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || 'Gagal memuat data tipe cuti/izin')
@@ -272,6 +283,8 @@ export function LeaveTypeManagement() {
 
       const data = await res.json()
       setLeaveTypes(data.leaveTypes || [])
+      setTotal(data.total ?? 0)
+      setTotalPages(data.totalPages ?? 1)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
       setError(message)
@@ -281,7 +294,7 @@ export function LeaveTypeManagement() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [page])
 
   useEffect(() => {
     fetchLeaveTypes()
@@ -764,6 +777,39 @@ export function LeaveTypeManagement() {
           </AnimatePresence>
         )}
       </motion.div>
+
+      {/* =================================================================== */}
+      {/* Pagination                                                          */}
+      {/* =================================================================== */}
+      {totalPages > 1 && (
+        <motion.div variants={itemVariants} className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Halaman {page} dari {totalPages} ({total} data)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || isLoading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              <ChevronLeft className="size-4 mr-1" />
+              Sebelumnya
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || isLoading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              Selanjutnya
+              <ChevronRight className="size-4 ml-1" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
 
       {/* =================================================================== */}
       {/* Add / Edit Dialog                                                   */}

@@ -19,10 +19,11 @@ import {
   ChevronRight,
   AlertTriangle,
   X,
+  Clock,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
-import type { User, Role } from '@/types'
+import type { User, Role, WorkShift } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -93,6 +94,7 @@ interface EmployeeFormData {
   role: Role
   unitKerja: string
   jabatan: string
+  shiftId: string
   isActive: boolean
 }
 
@@ -104,6 +106,7 @@ const emptyForm: EmployeeFormData = {
   role: 'PEGAWAI',
   unitKerja: '',
   jabatan: '',
+  shiftId: '',
   isActive: true,
 }
 
@@ -243,6 +246,17 @@ function EmployeeCard({
             {user.unitKerja && <span>{user.unitKerja}</span>}
             {user.jabatan && <span>• {user.jabatan}</span>}
           </div>
+          {user.shift && (
+            <div className="flex items-center gap-1.5 pt-1">
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800"
+              >
+                <Clock className="size-2.5 mr-0.5" />
+                {user.shift.name} ({user.shift.startTime} - {user.shift.endTime})
+              </Badge>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 pt-1">
             <Badge
               variant="outline"
@@ -332,6 +346,9 @@ export function EmployeeManagement() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Shifts state
+  const [shifts, setShifts] = useState<WorkShift[]>([])
+
   // Reset face confirmation
   const [resetFaceTarget, setResetFaceTarget] = useState<User | null>(null)
   const [isResettingFace, setIsResettingFace] = useState(false)
@@ -379,6 +396,16 @@ export function EmployeeManagement() {
     setPage(1)
   }, [search, roleFilter])
 
+  // Load shifts when dialog opens
+  useEffect(() => {
+    if (dialogOpen) {
+      fetch('/api/shifts?includeUsers=true')
+        .then((res) => res.json())
+        .then((data) => setShifts(data.shifts || []))
+        .catch(() => {})
+    }
+  }, [dialogOpen])
+
   // ---- Create / Update user ----
   const handleOpenCreate = () => {
     setEditingUser(null)
@@ -397,6 +424,7 @@ export function EmployeeManagement() {
       role: user.role as Role,
       unitKerja: user.unitKerja ?? '',
       jabatan: user.jabatan ?? '',
+      shiftId: user.shiftId ?? '',
       isActive: user.isActive,
     })
     setShowPassword(false)
@@ -430,6 +458,7 @@ export function EmployeeManagement() {
           role: formData.role,
           unitKerja: formData.unitKerja || null,
           jabatan: formData.jabatan || null,
+          shiftId: formData.shiftId || null,
           isActive: formData.isActive,
         }
         if (formData.password) {
@@ -462,6 +491,7 @@ export function EmployeeManagement() {
             role: formData.role,
             unitKerja: formData.unitKerja || null,
             jabatan: formData.jabatan || null,
+            shiftId: formData.shiftId || null,
           }),
         })
         if (!res.ok) {
@@ -657,6 +687,7 @@ export function EmployeeManagement() {
                   <TableHead className="hidden lg:table-cell">Email</TableHead>
                   <TableHead className="hidden xl:table-cell">Unit Kerja</TableHead>
                   <TableHead className="hidden xl:table-cell">Jabatan</TableHead>
+                  <TableHead className="hidden xl:table-cell">Jam Kerja</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead className="text-center">Wajah</TableHead>
                   <TableHead className="text-center">Status</TableHead>
@@ -667,7 +698,7 @@ export function EmployeeManagement() {
                 <AnimatePresence mode="popLayout">
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="h-32 text-center">
+                      <TableCell colSpan={11} className="h-32 text-center">
                         <div className="flex flex-col items-center justify-center space-y-2">
                           <Users className="size-10 text-muted-foreground/30" />
                           <p className="text-sm text-muted-foreground">
@@ -727,6 +758,21 @@ export function EmployeeManagement() {
                           <span className="text-xs text-muted-foreground">
                             {user.jabatan || '-'}
                           </span>
+                        </TableCell>
+
+                        {/* Jam Kerja */}
+                        <TableCell className="hidden xl:table-cell">
+                          {user.shift ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-2 py-0 bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800"
+                            >
+                              <Clock className="size-2.5 mr-0.5" />
+                              {user.shift.name}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </TableCell>
 
                         {/* Role */}
@@ -1034,6 +1080,27 @@ export function EmployeeManagement() {
                 placeholder="Masukkan jabatan"
                 className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
               />
+            </div>
+
+            {/* Jam Kerja */}
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">Jam Kerja</Label>
+              <Select
+                value={formData.shiftId || '__none__'}
+                onValueChange={(val) => setFormData((f) => ({ ...f, shiftId: val === '__none__' ? '' : val }))}
+              >
+                <SelectTrigger className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Pilih jam kerja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Tanpa Jam Kerja</SelectItem>
+                  {shifts.map((shift) => (
+                    <SelectItem key={shift.id} value={shift.id}>
+                      {shift.name} ({shift.startTime} - {shift.endTime})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Active Switch */}

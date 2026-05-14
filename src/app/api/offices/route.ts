@@ -2,23 +2,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const authUser = await getAuthUser()
     if (!authUser) {
       return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const skip = (page - 1) * limit
+
     // Admin sees all offices, employees see only active ones
     const where = authUser.role === 'ADMIN' ? {} : { isActive: true }
     const orderBy = authUser.role === 'ADMIN' ? { createdAt: 'desc' as const } : { name: 'asc' as const }
 
-    const offices = await db.office.findMany({
-      where,
-      orderBy,
-    })
+    const [offices, total] = await Promise.all([
+      db.office.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      db.office.count({ where }),
+    ])
 
-    return NextResponse.json({ offices })
+    return NextResponse.json({
+      offices,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    })
   } catch (error) {
     console.error('Offices GET error:', error)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })

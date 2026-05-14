@@ -1,14 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // 1. Check authentication
     const authUser = await getAuthUser()
     if (!authUser) {
       return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
     }
+
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const skip = (page - 1) * limit
 
     // 2. Get today's date range (start of day to end of day in local timezone)
     const now = new Date()
@@ -18,22 +23,32 @@ export async function GET() {
     // Format today's date as YYYY-MM-DD
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-    // 3. Get all active PEGAWAI users
-    const employees = await db.user.findMany({
-      where: {
-        role: 'PEGAWAI',
-        isActive: true,
-      },
-      select: {
-        id: true,
-        nama: true,
-        nip: true,
-        photo: true,
-        unitKerja: true,
-        jabatan: true,
-      },
-      orderBy: { nama: 'asc' },
-    })
+    // 3. Get all active PEGAWAI users (with pagination)
+    const [employees, empTotal] = await Promise.all([
+      db.user.findMany({
+        where: {
+          role: 'PEGAWAI',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          nama: true,
+          nip: true,
+          photo: true,
+          unitKerja: true,
+          jabatan: true,
+        },
+        orderBy: { nama: 'asc' },
+        skip,
+        take: limit,
+      }),
+      db.user.count({
+        where: {
+          role: 'PEGAWAI',
+          isActive: true,
+        },
+      }),
+    ])
 
     // 4. Get today's attendance records for all users (type MASUK and PULANG)
     const todayAttendances = await db.attendance.findMany({
@@ -100,7 +115,7 @@ export async function GET() {
       sakit: 0,
       dinas: 0,
       belumAbsen: 0,
-      total: employees.length,
+      total: empTotal,
     }
 
     const employeeStatuses = employees.map((emp) => {
@@ -191,6 +206,9 @@ export async function GET() {
       employees: employeeStatuses,
       date: dateStr,
       summary,
+      page,
+      totalPages: Math.ceil(empTotal / limit),
+      total: empTotal,
     })
   } catch (error) {
     console.error('Attendance monitor error:', error)

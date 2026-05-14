@@ -22,6 +22,8 @@ import {
   Paperclip,
   Tag,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 
 import type { LeaveRequest, LeaveType, LeaveStatus, User, LeaveTypeCategory } from '@/types'
@@ -1276,6 +1278,9 @@ export function LeaveManagement() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>('PENDING')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
 
   // Confirmation dialog (approve/reject)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -1300,13 +1305,19 @@ export function LeaveManagement() {
 
   const [activeMainTab, setActiveMainTab] = useState<string>('leaves')
 
+  const limit = 20
+
   const fetchLeaves = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const statusParam = activeTab === 'ALL' ? '' : `?status=${activeTab}`
-      const res = await fetch(`/api/leaves${statusParam}`)
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('limit', String(limit))
+      if (activeTab !== 'ALL') params.set('status', activeTab)
+
+      const res = await fetch(`/api/leaves?${params.toString()}`)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || 'Gagal memuat data pengajuan')
@@ -1314,6 +1325,8 @@ export function LeaveManagement() {
 
       const data = await res.json()
       setLeaves(data.leaves ?? [])
+      setTotal(data.total ?? 0)
+      setTotalPages(data.totalPages ?? 1)
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan')
       toast.error('Gagal memuat data', {
@@ -1322,11 +1335,16 @@ export function LeaveManagement() {
     } finally {
       setIsLoading(false)
     }
-  }, [activeTab])
+  }, [activeTab, page])
 
   useEffect(() => {
     fetchLeaves()
   }, [fetchLeaves])
+
+  // Reset page when tab changes
+  useEffect(() => {
+    setPage(1)
+  }, [activeTab])
 
   // Approve / Reject
   const handleAction = (leave: LeaveRequest, action: 'APPROVED' | 'REJECTED') => {
@@ -1690,6 +1708,39 @@ export function LeaveManagement() {
       {/* ================================================================= */}
       {/* Detail Dialog                                                     */}
       {/* ================================================================= */}
+      {/* ================================================================= */}
+      {/* Pagination                                                        */}
+      {/* ================================================================= */}
+      {activeMainTab === 'leaves' && totalPages > 1 && (
+        <motion.div variants={itemVariants} className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Halaman {page} dari {totalPages} ({total} data)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || isLoading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              <ChevronLeft className="size-4 mr-1" />
+              Sebelumnya
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || isLoading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              Selanjutnya
+              <ChevronRight className="size-4 ml-1" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
       <LeaveDetailDialog
         leave={detailLeave}
         open={detailOpen}

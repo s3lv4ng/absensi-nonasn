@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { nip, nama, email, password, role, unitKerja, jabatan } = body
+    const { nip, nama, email, password, role, unitKerja, jabatan, shiftId } = body
 
     if (!nip || !nama || !email || !password) {
       return NextResponse.json({ error: 'NIP, nama, email, dan password wajib diisi' }, { status: 400 })
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
         role: role || 'PEGAWAI',
         unitKerja: unitKerja || null,
         jabatan: jabatan || null,
+        shiftId: shiftId || null,
       },
     })
 
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
         photo: user.photo,
         unitKerja: user.unitKerja,
         jabatan: user.jabatan,
+        shiftId: user.shiftId,
         isActive: user.isActive,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
@@ -142,7 +144,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, nip, nama, email, role, unitKerja, jabatan, isActive, password, oldPassword } = body
+    const { id, nip, nama, email, role, unitKerja, jabatan, shiftId, isActive, password, oldPassword } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID user wajib diisi' }, { status: 400 })
@@ -179,6 +181,7 @@ export async function PUT(request: NextRequest) {
       updateData.role = role
       updateData.unitKerja = unitKerja
       updateData.jabatan = jabatan
+      updateData.shiftId = shiftId === undefined ? undefined : (shiftId || null)
       updateData.isActive = isActive
     } else {
       // Self-update: only allow limited fields
@@ -208,6 +211,16 @@ export async function PUT(request: NextRequest) {
         faceDescriptor: true,
         unitKerja: true,
         jabatan: true,
+        shiftId: true,
+        shift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            color: true,
+          },
+        },
         isActive: true,
         createdAt: true,
         updatedAt: true,

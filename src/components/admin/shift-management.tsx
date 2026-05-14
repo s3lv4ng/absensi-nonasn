@@ -18,6 +18,8 @@ import {
   UserMinus,
   Search,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 
 import type { WorkShift, User } from '@/types'
@@ -718,6 +720,12 @@ export function ShiftManagement() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const limit = 20
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingShift, setEditingShift] = useState<WorkShift | null>(null)
@@ -738,7 +746,12 @@ export function ShiftManagement() {
       setIsLoading(true)
       setError(null)
 
-      const res = await fetch('/api/shifts?includeUsers=true')
+      const params = new URLSearchParams()
+      params.set('includeUsers', 'true')
+      params.set('page', String(page))
+      params.set('limit', String(limit))
+
+      const res = await fetch(`/api/shifts?${params.toString()}`)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || 'Gagal memuat data jam kerja')
@@ -746,6 +759,8 @@ export function ShiftManagement() {
 
       const data = await res.json()
       setShifts(data.shifts || [])
+      setTotal(data.total ?? 0)
+      setTotalPages(data.totalPages ?? 1)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
       setError(message)
@@ -755,7 +770,7 @@ export function ShiftManagement() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [page])
 
   useEffect(() => {
     fetchShifts()
@@ -1004,6 +1019,39 @@ export function ShiftManagement() {
           </div>
         )}
       </motion.div>
+
+      {/* ================================================================= */}
+      {/* Pagination                                                        */}
+      {/* ================================================================= */}
+      {totalPages > 1 && (
+        <motion.div variants={itemVariants} className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Halaman {page} dari {totalPages} ({total} data)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || isLoading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              <ChevronLeft className="size-4 mr-1" />
+              Sebelumnya
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || isLoading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            >
+              Selanjutnya
+              <ChevronRight className="size-4 ml-1" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
 
       {/* ================================================================= */}
       {/* Add / Edit Dialog                                                 */}

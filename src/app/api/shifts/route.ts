@@ -11,36 +11,49 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const includeUsers = searchParams.get('includeUsers') === 'true'
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const skip = (page - 1) * limit
 
-    const shifts = await db.workShift.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: {
-        _count: { select: { users: true } },
-        ...(includeUsers
-          ? {
-              users: {
-                select: {
-                  id: true,
-                  nip: true,
-                  nama: true,
-                  email: true,
-                  role: true,
-                  photo: true,
-                  unitKerja: true,
-                  jabatan: true,
-                  shiftId: true,
-                  isActive: true,
-                  createdAt: true,
-                  updatedAt: true,
+    const [shifts, total] = await Promise.all([
+      db.workShift.findMany({
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take: limit,
+        include: {
+          _count: { select: { users: true } },
+          ...(includeUsers
+            ? {
+                users: {
+                  select: {
+                    id: true,
+                    nip: true,
+                    nama: true,
+                    email: true,
+                    role: true,
+                    photo: true,
+                    unitKerja: true,
+                    jabatan: true,
+                    shiftId: true,
+                    isActive: true,
+                    createdAt: true,
+                    updatedAt: true,
+                  },
+                  orderBy: { nama: 'asc' },
                 },
-                orderBy: { nama: 'asc' },
-              },
-            }
-          : {}),
-      },
-    })
+              }
+            : {}),
+        },
+      }),
+      db.workShift.count(),
+    ])
 
-    return NextResponse.json({ shifts })
+    return NextResponse.json({
+      shifts,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    })
   } catch (error) {
     console.error('Shifts GET error:', error)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
