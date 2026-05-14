@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { calculateAttendanceTiming } from '@/lib/attendance-utils'
+import { getJakartaTime, createJakartaDate, formatJakartaDate, formatJakartaTime, getShiftDate, getJakartaDayOfWeek } from '@/lib/timezone'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +12,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const period = searchParams.get('period') || 'monthly' // monthly | yearly
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1))
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()))
 
@@ -19,15 +20,15 @@ export async function GET(request: NextRequest) {
       where: { isActive: true, role: 'PEGAWAI' },
     })
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    // Use Jakarta timezone for "today" boundaries
+    const nowJakarta = getJakartaTime(new Date())
+    const todayStartUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day, 0, 0)
+    const todayEndUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day + 1, 0, 0)
 
     const todayAttendances = await db.attendance.findMany({
       where: {
         type: 'MASUK',
-        createdAt: { gte: today, lt: tomorrow },
+        createdAt: { gte: todayStartUtc, lt: todayEndUtc },
       },
       include: {
         user: {
@@ -54,29 +55,33 @@ export async function GET(request: NextRequest) {
     const approvedLeaves = await db.leaveRequest.count({
       where: {
         status: 'APPROVED',
-        startDate: { lte: tomorrow },
-        endDate: { gte: today },
+        startDate: { lte: todayEndUtc },
+        endDate: { gte: todayStartUtc },
       },
     })
 
-    // Chart data - last 7 days (for dashboard)
+    // Chart data - last 7 days (using Jakarta timezone)
     const chartData = []
     for (let i = 6; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      date.setHours(0, 0, 0, 0)
-      const nextDate = new Date(date)
-      nextDate.setDate(nextDate.getDate() + 1)
+      const dayYear = nowJakarta.year
+      const dayMonth = nowJakarta.month
+      const dayDay = nowJakarta.day - i
+
+      const dayStartUtc = createJakartaDate(dayYear, dayMonth, dayDay, 0, 0)
+      const dayEndUtc = createJakartaDate(dayYear, dayMonth, dayDay + 1, 0, 0)
 
       const dayAttendances = await db.attendance.findMany({
         where: {
           type: 'MASUK',
-          createdAt: { gte: date, lt: nextDate },
+          createdAt: { gte: dayStartUtc, lt: dayEndUtc },
         },
       })
 
-      const dayName = date.toLocaleDateString('id-ID', { weekday: 'short' })
-      const dayDate = date.getDate() + '/' + (date.getMonth() + 1)
+      const dayJakarta = getJakartaTime(dayStartUtc)
+      const dayOfWeek = dayStartUtc.getUTCDay()
+      const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+      const dayName = dayNames[dayOfWeek]
+      const dayDate = dayJakarta.day + '/' + (dayJakarta.month + 1)
 
       chartData.push({
         name: `${dayName} ${dayDate}`,
@@ -110,30 +115,28 @@ export async function GET(request: NextRequest) {
     // ======================================================================
 
     // Calculate working days in the selected month
-    const monthStart = new Date(year, month - 1, 1)
-    monthStart.setHours(0, 0, 0, 0)
-    const monthEnd = new Date(year, month, 1)
-    monthEnd.setHours(0, 0, 0, 0)
+    const monthStartUtc = createJakartaDate(year, month - 1, 1, 0, 0)
+    const monthEndUtc = createJakartaDate(year, month, 1, 0, 0)
 
     // Get office settings for work days
     const officeSettings = await db.officeSetting.findFirst()
     const workDaysStr = officeSettings?.workDays || '1,2,3,4,5'
-    const workDayNums = workDaysStr.split(',').map(Number) // 0=Sun, 1=Mon, etc.
+    const workDayNums = workDaysStr.split(',').map(Number)
 
-    // Count working days in the month
+    // Count working days in the month (Jakarta calendar)
     let totalWorkingDays = 0
-    const tempDate = new Date(monthStart)
-    while (tempDate < monthEnd) {
-      if (workDayNums.includes(tempDate.getDay())) {
+    const daysInMonth = new Date(year, month, 0).getDate()
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayDate = new Date(year, month - 1, d)
+      if (workDayNums.includes(dayDate.getDay())) {
         totalWorkingDays++
       }
-      tempDate.setDate(tempDate.getDate() + 1)
     }
 
     // Subtract holidays that fall on working days
     const holidays = await db.holiday.findMany({
       where: {
-        date: { gte: monthStart, lt: monthEnd },
+        date: { gte: monthStartUtc, lt: monthEndUtc },
       },
     })
     const holidayCount = holidays.filter((h) => {
@@ -146,15 +149,30 @@ export async function GET(request: NextRequest) {
     const monthAttendances = await db.attendance.findMany({
       where: {
         type: 'MASUK',
-        createdAt: { gte: monthStart, lt: monthEnd },
+        createdAt: { gte: monthStartUtc, lt: monthEndUtc },
       },
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        createdAt: true,
+        shiftId: true,
+        isManual: true,
         user: {
           select: {
             id: true,
             nip: true,
             nama: true,
             unitKerja: true,
+            shiftId: true,
+            shift: {
+              select: {
+                id: true,
+                startTime: true,
+                endTime: true,
+                lateTolerance: true,
+              },
+            },
           },
         },
       },
@@ -164,8 +182,8 @@ export async function GET(request: NextRequest) {
     const monthLeaves = await db.leaveRequest.findMany({
       where: {
         status: 'APPROVED',
-        startDate: { lt: monthEnd },
-        endDate: { gte: monthStart },
+        startDate: { lt: monthEndUtc },
+        endDate: { gte: monthStartUtc },
       },
     })
 
@@ -179,6 +197,9 @@ export async function GET(request: NextRequest) {
       telat: number
       izin: number
       cuti: number
+      sakit: number
+      dinasLuar: number
+      dinasDalam: number
       alpha: number
       pulangCepat: number
       lateCount: number
@@ -202,6 +223,9 @@ export async function GET(request: NextRequest) {
         telat: 0,
         izin: 0,
         cuti: 0,
+        sakit: 0,
+        dinasLuar: 0,
+        dinasDalam: 0,
         alpha: 0,
         pulangCepat: 0,
         lateCount: 0,
@@ -210,13 +234,19 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Get PULANG attendances for the month as well (for pulang cepat detection)
+    // Get PULANG attendances for the month as well (for pulang cepat detection & pairing)
     const monthPulangAttendances = await db.attendance.findMany({
       where: {
         type: 'PULANG',
-        createdAt: { gte: monthStart, lt: monthEnd },
+        createdAt: { gte: monthStartUtc, lt: monthEndUtc },
       },
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        createdAt: true,
+        shiftId: true,
+        isManual: true,
         user: {
           select: {
             id: true,
@@ -224,7 +254,9 @@ export async function GET(request: NextRequest) {
             shift: {
               select: {
                 id: true,
+                startTime: true,
                 endTime: true,
+                lateTolerance: true,
               },
             },
           },
@@ -232,7 +264,9 @@ export async function GET(request: NextRequest) {
         shift: {
           select: {
             id: true,
+            startTime: true,
             endTime: true,
+            lateTolerance: true,
           },
         },
       },
@@ -243,40 +277,71 @@ export async function GET(request: NextRequest) {
     const shiftMap = new Map(allShifts.map((s) => [s.id, s]))
     const officeSettingsForCalc = await db.officeSetting.findFirst()
 
+    // Build a map of PULANG attendances: userId_day -> { hasPulang: true, isManualPulang: boolean }
+    // This is used to determine if a MASUK record has a corresponding PULANG for the same day
+    const pulangDayMap = new Map<string, { isManualPulang: boolean }>()
+    for (const att of monthPulangAttendances) {
+      const attDate = new Date(att.createdAt)
+      // Get shift info for this user to determine effective shift date
+      const shiftData = att.shift || att.user?.shift || null
+      const startTime = shiftData?.startTime || officeSettingsForCalc?.startTime || '08:00'
+      const endTime = shiftData?.endTime || officeSettingsForCalc?.endTime || '17:00'
+      const shiftDate = getShiftDate(attDate, startTime, endTime)
+      // Only include PULANG within the selected month
+      if (shiftDate.year === year && shiftDate.month === month - 1) {
+        const key = `${att.userId}_${shiftDate.day}`
+        pulangDayMap.set(key, { isManualPulang: att.isManual })
+      }
+    }
+
     // Count MASUK attendances per employee
+    // Rule: hadir only counts when both MASUK and PULANG exist for the same day,
+    // OR when the MASUK is manual (admin override)
     for (const att of monthAttendances) {
       const entry = employeeMap.get(att.userId)
       if (!entry) continue
 
-      if (att.status === 'HADIR') {
-        entry.hadir++
-      } else if (att.status === 'TELAT') {
-        entry.telat++
-        entry.lateCount++
-        entry.hadir++ // telat also counts as present
+      // Determine the effective shift date for this MASUK record
+      const attDate = new Date(att.createdAt)
+      const shiftData = att.user?.shift || null
+      const startTime = shiftData?.startTime || officeSettingsForCalc?.startTime || '08:00'
+      const endTime = shiftData?.endTime || officeSettingsForCalc?.endTime || '17:00'
+      const shiftDate = getShiftDate(attDate, startTime, endTime)
 
-        // Calculate late minutes
-        const shiftId = att.shiftId
-        const shift = shiftId ? shiftMap.get(shiftId) : null
-        const startTime = shift?.startTime || officeSettingsForCalc?.startTime
-        const tolerance = shift?.lateTolerance ?? officeSettingsForCalc?.lateTolerance ?? 0
-        if (startTime) {
-          const attDate = new Date(att.createdAt)
-          const [startH, startM] = startTime.split(':').map(Number)
-          const shiftStart = new Date(attDate)
-          shiftStart.setHours(startH, startM + tolerance, 0, 0)
-          const diffMs = attDate.getTime() - shiftStart.getTime()
-          if (diffMs > 0) {
-            entry.totalLateMinutes += Math.ceil(diffMs / 60000)
+      // Only process attendances within the selected month
+      if (shiftDate.year !== year || shiftDate.month !== month - 1) continue
+
+      // Check if there's a corresponding PULANG for this day
+      const dayKey = `${att.userId}_${shiftDate.day}`
+      const pulangInfo = pulangDayMap.get(dayKey)
+      const hasPulang = !!pulangInfo
+
+      // Calculate late minutes using shared utility
+      const shiftId = att.shiftId
+      const shift = shiftId ? shiftMap.get(shiftId) : null
+      const shiftStartTime = shift?.startTime || officeSettingsForCalc?.startTime || '08:00'
+      const shiftEndTime = shift?.endTime || officeSettingsForCalc?.endTime || '17:00'
+      const tolerance = shift?.lateTolerance ?? officeSettingsForCalc?.lateTolerance ?? 0
+      const calcResult = calculateAttendanceTiming(shiftStartTime, shiftEndTime, tolerance, attDate, 'MASUK')
+      const isLate = calcResult.isLate
+
+      if (att.status === 'HADIR' || att.status === 'TELAT') {
+        // Check pair condition: both MASUK and PULANG must exist, OR MASUK is manual
+        if (hasPulang || att.isManual) {
+          // Count as hadir
+          entry.hadir++
+          if (isLate) {
+            entry.telat++
+            entry.lateCount++
+            entry.totalLateMinutes += calcResult.lateMinutes
           }
         }
-      } else if (att.status === 'IZIN') {
-        entry.izin++
-      } else if (att.status === 'CUTI') {
-        entry.cuti++
+        // If no pulang and not manual, don't count as hadir (will fall through to alpha calculation)
       } else if (att.status === 'ALPHA') {
         entry.alpha++
       }
+      // Note: IZIN, CUTI, SAKIT, DINAS statuses from attendance records are NOT counted here
+      // to avoid double-counting. They are counted only from the LeaveRequest table below.
     }
 
     // Count PULANG_CEPAT from PULANG attendances
@@ -284,25 +349,71 @@ export async function GET(request: NextRequest) {
       const entry = employeeMap.get(att.userId)
       if (!entry) continue
 
-      // Calculate early departure minutes
+      // Calculate early departure minutes using shared utility
       const shiftData = att.shift || att.user?.shift || null
-      const endTime = shiftData?.endTime || officeSettingsForCalc?.endTime
-      if (endTime) {
-        const attDate = new Date(att.createdAt)
-        const [endH, endM] = endTime.split(':').map(Number)
-        const shiftEnd = new Date(attDate)
-        shiftEnd.setHours(endH, endM, 0, 0)
-        const diffMs = shiftEnd.getTime() - attDate.getTime()
-        if (diffMs > 0) {
-          entry.pulangCepat++
-          entry.totalEarlyMinutes += Math.ceil(diffMs / 60000)
+      const startTime = shiftData?.startTime || officeSettingsForCalc?.startTime || '08:00'
+      const endTime = shiftData?.endTime || officeSettingsForCalc?.endTime || '17:00'
+      const tolerance = shiftData?.lateTolerance ?? officeSettingsForCalc?.lateTolerance ?? 0
+      const attDate = new Date(att.createdAt)
+      const result = calculateAttendanceTiming(startTime, endTime, tolerance, attDate, 'PULANG')
+      if (result.isEarly) {
+        entry.pulangCepat++
+        entry.totalEarlyMinutes += result.earlyMinutes
+      }
+    }
+
+    // Count leave-based statuses from approved leaves
+    // Each leave may span multiple days; count each working day separately
+    // All leave types (including DL/DD) only count working days (non-weekend, non-holiday)
+    // so that summary counts are consistent with totalWorkingDays and percentages stay ≤ 100%
+    for (const leave of monthLeaves) {
+      const entry = employeeMap.get(leave.userId)
+      if (!entry) continue
+
+      // Calculate days within the leave period for this month
+      const leaveStart = new Date(leave.startDate)
+      const leaveEnd = new Date(leave.endDate)
+      const effectiveStart = leaveStart < monthStartUtc ? monthStartUtc : leaveStart
+      const effectiveEnd = leaveEnd > monthEndUtc ? monthEndUtc : leaveEnd
+
+      let daysOnLeave = 0
+      const current = new Date(effectiveStart)
+      while (current <= effectiveEnd) {
+        // Use Jakarta timezone to get the correct day of week
+        const jakartaTime = getJakartaTime(current)
+        const dayOfWeek = getJakartaDayOfWeek(current)
+
+        if (workDayNums.includes(dayOfWeek)) {
+          // Only count working days for ALL leave types (including DL/DD)
+          const isHoliday = holidays.some((h) => {
+            const hd = getJakartaTime(new Date(h.date))
+            return hd.day === jakartaTime.day && hd.month === jakartaTime.month && hd.year === jakartaTime.year
+          })
+          if (!isHoliday) {
+            daysOnLeave++
+          }
+        }
+        current.setUTCDate(current.getUTCDate() + 1)
+      }
+
+      if (daysOnLeave > 0) {
+        if (leave.type === 'SAKIT') {
+          entry.sakit += daysOnLeave
+        } else if (leave.type === 'DINAS' || leave.type === 'DINAS_LUAR' || leave.type === 'DL') {
+          entry.dinasLuar += daysOnLeave
+        } else if (leave.type === 'DINAS_DALAM' || leave.type === 'DD') {
+          entry.dinasDalam += daysOnLeave
+        } else if (leave.type === 'IZIN') {
+          entry.izin += daysOnLeave
+        } else if (leave.type === 'CUTI') {
+          entry.cuti += daysOnLeave
         }
       }
     }
 
     // Calculate alpha for employees who didn't check in
     for (const [userId, entry] of employeeMap) {
-      const totalRecorded = entry.hadir + entry.izin + entry.cuti + entry.alpha
+      const totalRecorded = entry.hadir + entry.izin + entry.cuti + entry.sakit + entry.dinasLuar + entry.dinasDalam + entry.alpha
       if (totalWorkingDays > totalRecorded) {
         entry.alpha += totalWorkingDays - totalRecorded
       }
@@ -310,7 +421,8 @@ export async function GET(request: NextRequest) {
 
     // Calculate percentages and build summaries
     const employeeSummaries = Array.from(employeeMap.values()).map((e) => {
-      const presentDays = e.hadir // hadir already includes telat
+      // DD and DL count as hadir for persentase
+      const presentDays = e.hadir + e.dinasLuar + e.dinasDalam
       const persentase = totalWorkingDays > 0
         ? Math.round((presentDays / totalWorkingDays) * 1000) / 10
         : 0
@@ -323,6 +435,9 @@ export async function GET(request: NextRequest) {
         telat: e.telat,
         izin: e.izin,
         cuti: e.cuti,
+        sakit: e.sakit,
+        dinasLuar: e.dinasLuar,
+        dinasDalam: e.dinasDalam,
         alpha: e.alpha,
         pulangCepat: e.pulangCepat,
         totalLateMinutes: e.totalLateMinutes,
@@ -343,54 +458,48 @@ export async function GET(request: NextRequest) {
       ? Math.round((employeeSummaries.reduce((sum, e) => sum + e.persentase, 0) / employeeSummaries.length) * 10) / 10
       : 0
 
-    // Daily attendance rates for line chart
+    // Daily attendance rates for line chart (using Jakarta timezone)
     const dailyRates = []
-    const rateDate = new Date(monthStart)
-    while (rateDate < monthEnd) {
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayDate = new Date(year, month - 1, d)
       // Only include working days
-      if (workDayNums.includes(rateDate.getDay())) {
-        // Check if it's a holiday
-        const isHoliday = holidays.some((h) => {
-          const hd = new Date(h.date)
-          return hd.getDate() === rateDate.getDate() &&
-            hd.getMonth() === rateDate.getMonth() &&
-            hd.getFullYear() === rateDate.getFullYear()
-        })
+      if (!workDayNums.includes(dayDate.getDay())) continue
 
-        if (!isHoliday) {
-          const dayStart = new Date(rateDate)
-          dayStart.setHours(0, 0, 0, 0)
-          const dayEnd = new Date(rateDate)
-          dayEnd.setDate(dayEnd.getDate() + 1)
+      // Check if it's a holiday
+      const isHoliday = holidays.some((h) => {
+        const hd = getJakartaTime(new Date(h.date))
+        return hd.day === d && hd.month === month - 1 && hd.year === year
+      })
+      if (isHoliday) continue
 
-          const dayAttendancesList = monthAttendances.filter((a) => {
-            const aDate = new Date(a.createdAt)
-            return aDate >= dayStart && aDate < dayEnd
-          })
+      const dayStartUtc = createJakartaDate(year, month - 1, d, 0, 0)
+      const dayEndUtc = createJakartaDate(year, month - 1, d + 1, 0, 0)
 
-          const dayHadir = dayAttendancesList.filter((a) => a.status === 'HADIR').length
-          const dayTelat = dayAttendancesList.filter((a) => a.status === 'TELAT').length
-          const dayPresent = dayHadir + dayTelat
-          const rate = totalEmployees > 0
-            ? Math.round((dayPresent / totalEmployees) * 1000) / 10
-            : 0
+      const dayAttendancesList = monthAttendances.filter((a) => {
+        const aDate = new Date(a.createdAt)
+        return aDate >= dayStartUtc && aDate < dayEndUtc
+      })
 
-          const dayLabel = rateDate.getDate() + '/' + (rateDate.getMonth() + 1)
+      const dayHadir = dayAttendancesList.filter((a) => a.status === 'HADIR').length
+      const dayTelat = dayAttendancesList.filter((a) => a.status === 'TELAT').length
+      const dayPresent = dayHadir + dayTelat
+      const rate = totalEmployees > 0
+        ? Math.round((dayPresent / totalEmployees) * 1000) / 10
+        : 0
 
-          dailyRates.push({
-            date: dayLabel,
-            rate,
-            hadir: dayHadir,
-            telat: dayTelat,
-            total: totalEmployees,
-          })
-        }
-      }
-      rateDate.setDate(rateDate.getDate() + 1)
+      const dayLabel = d + '/' + month
+
+      dailyRates.push({
+        date: dayLabel,
+        rate,
+        hadir: dayHadir,
+        telat: dayTelat,
+        total: totalEmployees,
+      })
     }
 
     return NextResponse.json({
-      // Dashboard data (existing)
+      // Dashboard data
       stats: {
         totalEmployees,
         presentToday,
@@ -403,7 +512,7 @@ export async function GET(request: NextRequest) {
       recentAttendances,
       todayAttendances,
 
-      // Reports page data (new)
+      // Reports page data
       totalWorkingDays,
       averageAttendanceRate: avgRate,
       mostLateEmployees,

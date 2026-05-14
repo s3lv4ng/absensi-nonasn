@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { calculateAttendanceTiming } from '@/lib/attendance-utils'
+import { getJakartaTime, createJakartaDate, formatJakartaDate } from '@/lib/timezone'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,13 +17,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
 
-    // 2. Get today's date range (start of day to end of day in local timezone)
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    // 2. Get today's date range using Jakarta timezone
+    const nowJakarta = getJakartaTime(new Date())
+    const todayStartUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day, 0, 0)
+    const todayEndUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day + 1, 0, 0)
 
-    // Format today's date as YYYY-MM-DD
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    // Format today's date as YYYY-MM-DD in Jakarta timezone
+    const dateStr = formatJakartaDate(new Date())
 
     // 3. Get all active PEGAWAI users (with pagination)
     const [employees, empTotal] = await Promise.all([
@@ -54,8 +56,8 @@ export async function GET(request: NextRequest) {
     const todayAttendances = await db.attendance.findMany({
       where: {
         createdAt: {
-          gte: todayStart,
-          lt: todayEnd,
+          gte: todayStartUtc,
+          lt: todayEndUtc,
         },
         type: { in: ['MASUK', 'PULANG'] },
       },
@@ -91,8 +93,8 @@ export async function GET(request: NextRequest) {
     const approvedLeaves = await db.leaveRequest.findMany({
       where: {
         status: 'APPROVED',
-        startDate: { lte: todayEnd },
-        endDate: { gte: todayStart },
+        startDate: { lte: todayEndUtc },
+        endDate: { gte: todayStartUtc },
       },
       select: {
         id: true,
@@ -148,36 +150,26 @@ export async function GET(request: NextRequest) {
       const userShiftId = userShiftMap.get(userId)
       const shift = userShiftId ? shiftMap.get(userShiftId) : null
       const effectiveShift = shift || null
-      const fallbackStart = officeSettingFallback?.startTime
-      const fallbackEnd = officeSettingFallback?.endTime
+      const fallbackStart = officeSettingFallback?.startTime || '08:00'
+      const fallbackEnd = officeSettingFallback?.endTime || '17:00'
       const fallbackTolerance = officeSettingFallback?.lateTolerance || 0
 
       const attDate = new Date(att.createdAt)
+      const startTime = effectiveShift?.startTime || fallbackStart
+      const endTime = effectiveShift?.endTime || fallbackEnd
+      const tolerance = effectiveShift?.lateTolerance ?? fallbackTolerance
 
       if (att.type === 'MASUK') {
-        const startTime = effectiveShift?.startTime || fallbackStart
-        const tolerance = effectiveShift?.lateTolerance ?? fallbackTolerance
-        if (startTime) {
-          const [startH, startM] = startTime.split(':').map(Number)
-          const shiftStart = new Date(attDate)
-          shiftStart.setHours(startH, startM + tolerance, 0, 0)
-          const diffMs = attDate.getTime() - shiftStart.getTime()
-          if (diffMs > 0) {
-            lateMinutes = Math.ceil(diffMs / 60000)
-          }
+        const result = calculateAttendanceTiming(startTime, endTime, tolerance, attDate, 'MASUK')
+        if (result.isLate) {
+          lateMinutes = result.lateMinutes
         }
       }
 
       if (att.type === 'PULANG') {
-        const endTime = effectiveShift?.endTime || fallbackEnd
-        if (endTime) {
-          const [endH, endM] = endTime.split(':').map(Number)
-          const shiftEnd = new Date(attDate)
-          shiftEnd.setHours(endH, endM, 0, 0)
-          const diffMs = shiftEnd.getTime() - attDate.getTime()
-          if (diffMs > 0) {
-            earlyMinutes = Math.ceil(diffMs / 60000)
-          }
+        const result = calculateAttendanceTiming(startTime, endTime, tolerance, attDate, 'PULANG')
+        if (result.isEarly) {
+          earlyMinutes = result.earlyMinutes
         }
       }
 
@@ -253,11 +245,6 @@ export async function GET(request: NextRequest) {
           status = 'TELAT'
         } else {
           status = 'HADIR'
-        }
-        // Also check if they have PULANG with early departure
-        if (pulangRecord && earlyMinutes && earlyMinutes > 0) {
-          // Mark as PULANG_CEPAT in addition to HADIR/TELAT
-          // We use a combined approach: keep the primary status but add early departure info
         }
       }
       // Priority 3: No attendance and no leave

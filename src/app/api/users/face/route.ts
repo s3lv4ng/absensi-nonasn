@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { compressBase64Image } from '@/lib/image-compress'
 
 const MATCH_THRESHOLD = 0.6
 
@@ -114,7 +115,20 @@ export async function PUT(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {}
     if (faceDescriptor) updateData.faceDescriptor = faceDescriptor
-    if (photo) updateData.photo = photo
+    // Compress profile/face photo to save database storage
+    // Resize to 320x320, JPEG quality 70 (~8-20KB vs ~50-100KB raw)
+    if (photo) {
+      try {
+        updateData.photo = await compressBase64Image(photo, {
+          maxWidth: 320,
+          maxHeight: 320,
+          quality: 70,
+        })
+      } catch (compressErr) {
+        console.error('Photo compression failed, storing original:', compressErr)
+        updateData.photo = photo
+      }
+    }
     // Set faceRegisteredAt when registering face for the first time
     updateData.faceRegisteredAt = new Date()
 

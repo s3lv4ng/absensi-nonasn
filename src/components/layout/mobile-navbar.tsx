@@ -63,8 +63,8 @@ const adminNavItems: NavItem[] = [
     icon: ClipboardCheck,
   },
   {
-    title: 'Laporan',
-    view: 'admin-reports',
+    title: 'Rekap',
+    view: 'admin-rekap-absen',
     icon: History,
   },
   {

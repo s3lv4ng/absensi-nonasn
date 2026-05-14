@@ -43,6 +43,11 @@ export async function PUT(request: NextRequest) {
       endTime,
       lateTolerance,
       workDays,
+      appName,
+      logoPath,
+      faviconPath,
+      pwaIcon192Path,
+      pwaIcon512Path,
     } = body
 
     let setting = await db.officeSetting.findFirst()
@@ -58,6 +63,11 @@ export async function PUT(request: NextRequest) {
           endTime: endTime || '17:00',
           lateTolerance: lateTolerance ?? 15,
           workDays: workDays || '1,2,3,4,5',
+          appName: appName || 'Sistem Absensi Pegawai',
+          logoPath: logoPath || null,
+          faviconPath: faviconPath || null,
+          pwaIcon192Path: pwaIcon192Path || null,
+          pwaIcon512Path: pwaIcon512Path || null,
         },
       })
     } else {
@@ -72,6 +82,11 @@ export async function PUT(request: NextRequest) {
           ...(endTime !== undefined && { endTime }),
           ...(lateTolerance !== undefined && { lateTolerance }),
           ...(workDays !== undefined && { workDays }),
+          ...(appName !== undefined && { appName }),
+          ...(logoPath !== undefined && { logoPath }),
+          ...(faviconPath !== undefined && { faviconPath }),
+          ...(pwaIcon192Path !== undefined && { pwaIcon192Path }),
+          ...(pwaIcon512Path !== undefined && { pwaIcon512Path }),
         },
       })
     }

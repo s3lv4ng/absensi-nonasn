@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
 
+    const isActive = searchParams.get('isActive')
+
     const where: Record<string, unknown> = {}
     if (search) {
       where.OR = [
@@ -27,6 +29,9 @@ export async function GET(request: NextRequest) {
     }
     if (role) {
       where.role = role
+    }
+    if (isActive !== null && isActive !== '') {
+      where.isActive = isActive === 'true'
     }
 
     const [users, total] = await Promise.all([
@@ -42,7 +47,23 @@ export async function GET(request: NextRequest) {
           faceDescriptor: true,
           unitKerja: true,
           jabatan: true,
+          unitKerjaId: true,
+          jabatanId: true,
+          unitKerjaRef: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          jabatanRef: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           shiftId: true,
+          mulaiBekerja: true,
+          tanggalSelesai: true,
           shift: {
             select: {
               id: true,
@@ -83,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { nip, nama, email, password, role, unitKerja, jabatan, shiftId } = body
+    const { nip, nama, email, password, role, unitKerja, jabatan, unitKerjaId, jabatanId, shiftId } = body
 
     if (!nip || !nama || !email || !password) {
       return NextResponse.json({ error: 'NIP, nama, email, dan password wajib diisi' }, { status: 400 })
@@ -101,6 +122,24 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
+    // Resolve unitKerja name from FK if provided
+    let resolvedUnitKerja = unitKerja || null
+    if (unitKerjaId) {
+      const unitKerjaRecord = await db.unitKerja.findUnique({ where: { id: unitKerjaId }, select: { name: true } })
+      if (unitKerjaRecord) {
+        resolvedUnitKerja = unitKerjaRecord.name
+      }
+    }
+
+    // Resolve jabatan name from FK if provided
+    let resolvedJabatan = jabatan || null
+    if (jabatanId) {
+      const jabatanRecord = await db.jabatan.findUnique({ where: { id: jabatanId }, select: { name: true } })
+      if (jabatanRecord) {
+        resolvedJabatan = jabatanRecord.name
+      }
+    }
+
     const user = await db.user.create({
       data: {
         nip,
@@ -108,28 +147,56 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase(),
         password: hashedPassword,
         role: role || 'PEGAWAI',
-        unitKerja: unitKerja || null,
-        jabatan: jabatan || null,
+        unitKerja: resolvedUnitKerja,
+        jabatan: resolvedJabatan,
+        unitKerjaId: unitKerjaId || null,
+        jabatanId: jabatanId || null,
         shiftId: shiftId || null,
+        mulaiBekerja: body.mulaiBekerja ? new Date(body.mulaiBekerja) : null,
+        tanggalSelesai: body.tanggalSelesai ? new Date(body.tanggalSelesai) : null,
+      },
+      select: {
+        id: true,
+        nip: true,
+        nama: true,
+        email: true,
+        role: true,
+        photo: true,
+        unitKerja: true,
+        jabatan: true,
+        unitKerjaId: true,
+        jabatanId: true,
+        unitKerjaRef: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        jabatanRef: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        shiftId: true,
+        mulaiBekerja: true,
+        tanggalSelesai: true,
+        shift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
+            color: true,
+          },
+        },
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
       },
     })
 
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        nip: user.nip,
-        nama: user.nama,
-        email: user.email,
-        role: user.role,
-        photo: user.photo,
-        unitKerja: user.unitKerja,
-        jabatan: user.jabatan,
-        shiftId: user.shiftId,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-    }, { status: 201 })
+    return NextResponse.json({ user }, { status: 201 })
   } catch (error) {
     console.error('Users POST error:', error)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
@@ -144,7 +211,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, nip, nama, email, role, unitKerja, jabatan, shiftId, isActive, password, oldPassword } = body
+    const { id, nip, nama, email, role, unitKerja, jabatan, unitKerjaId, jabatanId, shiftId, isActive, password, oldPassword } = body
 
     if (!id) {
       return NextResponse.json({ error: 'ID user wajib diisi' }, { status: 400 })
@@ -181,8 +248,32 @@ export async function PUT(request: NextRequest) {
       updateData.role = role
       updateData.unitKerja = unitKerja
       updateData.jabatan = jabatan
+      updateData.unitKerjaId = unitKerjaId === undefined ? undefined : (unitKerjaId || null)
+      updateData.jabatanId = jabatanId === undefined ? undefined : (jabatanId || null)
       updateData.shiftId = shiftId === undefined ? undefined : (shiftId || null)
+      updateData.mulaiBekerja = body.mulaiBekerja ? new Date(body.mulaiBekerja) : null
+      updateData.tanggalSelesai = body.tanggalSelesai ? new Date(body.tanggalSelesai) : null
       updateData.isActive = isActive
+
+      // Resolve unitKerja name from FK if provided
+      if (unitKerjaId) {
+        const unitKerjaRecord = await db.unitKerja.findUnique({ where: { id: unitKerjaId }, select: { name: true } })
+        if (unitKerjaRecord) {
+          updateData.unitKerja = unitKerjaRecord.name
+        }
+      } else if (unitKerjaId === null) {
+        updateData.unitKerja = null
+      }
+
+      // Resolve jabatan name from FK if provided
+      if (jabatanId) {
+        const jabatanRecord = await db.jabatan.findUnique({ where: { id: jabatanId }, select: { name: true } })
+        if (jabatanRecord) {
+          updateData.jabatan = jabatanRecord.name
+        }
+      } else if (jabatanId === null) {
+        updateData.jabatan = null
+      }
     } else {
       // Self-update: only allow limited fields
       if (nama !== undefined) updateData.nama = nama
@@ -211,7 +302,23 @@ export async function PUT(request: NextRequest) {
         faceDescriptor: true,
         unitKerja: true,
         jabatan: true,
+        unitKerjaId: true,
+        jabatanId: true,
+        unitKerjaRef: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        jabatanRef: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         shiftId: true,
+        mulaiBekerja: true,
+        tanggalSelesai: true,
         shift: {
           select: {
             id: true,

@@ -61,7 +61,19 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           appStore.setCurrentView('employee-dashboard')
         }
       } else {
+        // Not authenticated — check if setup is needed
         set({ user: null, isAuthenticated: false, isLoading: false, initialized: true })
+        try {
+          const setupRes = await fetch('/api/setup/status')
+          if (setupRes.ok) {
+            const setupData = await setupRes.json()
+            if (setupData.needsSetup) {
+              useAppStore.getState().setCurrentView('setup')
+            }
+          }
+        } catch {
+          // Ignore setup check errors — default to login
+        }
       }
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false, initialized: true })
@@ -69,19 +81,64 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 }))
 
+interface AppIdentity {
+  appName: string
+  logoPath: string | null
+  faviconPath: string | null
+  pwaIcon192Path: string | null
+  pwaIcon512Path: string | null
+  officeName: string
+}
+
 interface AppStore {
   currentView: AppView
   sidebarOpen: boolean
+  appIdentity: AppIdentity
   setCurrentView: (view: AppView) => void
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
+  setAppIdentity: (identity: Partial<AppIdentity>) => void
+  fetchAppIdentity: () => Promise<void>
+}
+
+const defaultIdentity: AppIdentity = {
+  appName: 'Sistem Absensi Pegawai',
+  logoPath: null,
+  faviconPath: null,
+  pwaIcon192Path: null,
+  pwaIcon512Path: null,
+  officeName: 'Kantor Pusat',
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
   currentView: 'login',
   sidebarOpen: false,
+  appIdentity: defaultIdentity,
 
   setCurrentView: (currentView) => set({ currentView }),
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
+  setAppIdentity: (identity) => set((state) => ({
+    appIdentity: { ...state.appIdentity, ...identity },
+  })),
+  fetchAppIdentity: async () => {
+    try {
+      const res = await fetch('/api/app-identity')
+      if (res.ok) {
+        const data = await res.json()
+        set({
+          appIdentity: {
+            appName: data.appName || defaultIdentity.appName,
+            logoPath: data.logoPath || null,
+            faviconPath: data.faviconPath || null,
+            pwaIcon192Path: data.pwaIcon192Path || null,
+            pwaIcon512Path: data.pwaIcon512Path || null,
+            officeName: data.officeName || defaultIdentity.officeName,
+          },
+        })
+      }
+    } catch {
+      // Use defaults
+    }
+  },
 }))

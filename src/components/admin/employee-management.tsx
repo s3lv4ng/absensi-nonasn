@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   Users,
@@ -18,6 +18,9 @@ import {
   AlertTriangle,
   X,
   Clock,
+  Building2,
+  Briefcase,
+  Loader2,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
@@ -85,6 +88,22 @@ interface UsersResponse {
   totalPages: number
 }
 
+interface UnitKerja {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  _count?: { users: number }
+}
+
+interface Jabatan {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  _count?: { users: number }
+}
+
 interface EmployeeFormData {
   nip: string
   nama: string
@@ -93,7 +112,11 @@ interface EmployeeFormData {
   role: Role
   unitKerja: string
   jabatan: string
+  unitKerjaId: string
+  jabatanId: string
   shiftId: string
+  mulaiBekerja: string
+  tanggalSelesai: string
   isActive: boolean
 }
 
@@ -105,15 +128,21 @@ const emptyForm: EmployeeFormData = {
   role: 'PEGAWAI',
   unitKerja: '',
   jabatan: '',
+  unitKerjaId: '',
+  jabatanId: '',
   shiftId: '',
+  mulaiBekerja: '',
+  tanggalSelesai: '',
   isActive: true,
 }
+
+type TabType = 'pegawai' | 'unitKerja' | 'jabatan'
 
 // ---------------------------------------------------------------------------
 // Animation variants
 // ---------------------------------------------------------------------------
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -121,7 +150,7 @@ const containerVariants = {
   },
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -256,6 +285,11 @@ function EmployeeCard({
               </Badge>
             </div>
           )}
+          {user.mulaiBekerja && (
+            <p className="text-xs text-muted-foreground pt-1">
+              Mulai: {new Date(user.mulaiBekerja).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          )}
           <div className="flex items-center gap-1.5 pt-1">
             <Badge
               variant="outline"
@@ -316,11 +350,584 @@ function EmployeeCard({
 }
 
 // ---------------------------------------------------------------------------
+// Unit Kerja Tab Sub-Component
+// ---------------------------------------------------------------------------
+
+function UnitKerjaTab() {
+  const [items, setItems] = useState<UnitKerja[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<UnitKerja | null>(null)
+  const [formData, setFormData] = useState({ name: '', description: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<UnitKerja | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const fetchItems = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const res = await fetch('/api/unit-kerja?limit=100')
+      if (!res.ok) throw new Error('Gagal memuat data')
+      const data = await res.json()
+      setItems(data.unitKerja || [])
+    } catch {
+      toast.error('Gagal memuat data unit kerja')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchItems()
+  }, [fetchItems])
+
+  const handleOpenCreate = () => {
+    setEditingItem(null)
+    setFormData({ name: '', description: '' })
+    setDialogOpen(true)
+  }
+
+  const handleOpenEdit = (item: UnitKerja) => {
+    setEditingItem(item)
+    setFormData({ name: item.name, description: item.description ?? '' })
+    setDialogOpen(true)
+  }
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Nama wajib diisi')
+      return
+    }
+    try {
+      setIsSubmitting(true)
+      const method = editingItem ? 'PUT' : 'POST'
+      const body = editingItem
+        ? { id: editingItem.id, name: formData.name, description: formData.description || null }
+        : { name: formData.name, description: formData.description || null }
+
+      const res = await fetch('/api/unit-kerja', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menyimpan')
+      }
+
+      toast.success(editingItem ? 'Unit kerja diperbarui' : 'Unit kerja ditambahkan')
+      setDialogOpen(false)
+      fetchItems()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menyimpan')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      setIsDeleting(true)
+      const res = await fetch(`/api/unit-kerja?id=${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menghapus')
+      }
+      toast.success('Unit kerja dihapus')
+      setDeleteTarget(null)
+      fetchItems()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="bg-white/70 dark:bg-gray-900/60">
+            <CardContent className="p-4 space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-6 w-16" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{items.length} unit kerja</p>
+        <Button
+          onClick={handleOpenCreate}
+          size="sm"
+          className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+        >
+          <Plus className="size-4 mr-1.5" />
+          Tambah Unit Kerja
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+          <CardContent className="py-16 flex flex-col items-center space-y-2">
+            <Building2 className="size-10 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Belum ada data unit kerja</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <AnimatePresence mode="popLayout">
+            {items.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+              >
+                <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="size-10 rounded-lg bg-blue-50/80 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                          <Building2 className="size-5 text-[#1e40af] dark:text-blue-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+                          {item.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                          item.isActive
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
+                            : 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                        }`}
+                      >
+                        {item.isActive ? 'Aktif' : 'Nonaktif'}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-blue-50 dark:border-blue-900/20">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 bg-blue-50/50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800"
+                      >
+                        <Users className="size-2.5 mr-0.5" />
+                        {item._count?.users ?? 0} pegawai
+                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          onClick={() => handleOpenEdit(item)}
+                        >
+                          <Pencil className="size-3 text-[#2563eb] dark:text-blue-400" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <Trash2 className="size-3 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+          <DialogHeader>
+            <DialogTitle className="text-[#1e40af] dark:text-blue-300">
+              {editingItem ? 'Edit Unit Kerja' : 'Tambah Unit Kerja'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingItem ? 'Perbarui informasi unit kerja.' : 'Isi data unit kerja baru.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">
+                Nama <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Masukkan nama unit kerja"
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">Deskripsi</Label>
+              <Input
+                value={formData.description}
+                onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Masukkan deskripsi (opsional)"
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-blue-200 dark:border-blue-800">
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Menyimpan...
+                </span>
+              ) : editingItem ? (
+                'Simpan Perubahan'
+              ) : (
+                'Tambah'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="bg-white dark:bg-gray-900 border-red-200/50 dark:border-red-900/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="size-5" />
+              Hapus Unit Kerja
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700 text-white">
+              {isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Jabatan Tab Sub-Component
+// ---------------------------------------------------------------------------
+
+function JabatanTab() {
+  const [items, setItems] = useState<Jabatan[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<Jabatan | null>(null)
+  const [formData, setFormData] = useState({ name: '', description: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Jabatan | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const fetchItems = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const res = await fetch('/api/jabatan?limit=100')
+      if (!res.ok) throw new Error('Gagal memuat data')
+      const data = await res.json()
+      setItems(data.jabatan || [])
+    } catch {
+      toast.error('Gagal memuat data jabatan')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchItems()
+  }, [fetchItems])
+
+  const handleOpenCreate = () => {
+    setEditingItem(null)
+    setFormData({ name: '', description: '' })
+    setDialogOpen(true)
+  }
+
+  const handleOpenEdit = (item: Jabatan) => {
+    setEditingItem(item)
+    setFormData({ name: item.name, description: item.description ?? '' })
+    setDialogOpen(true)
+  }
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Nama wajib diisi')
+      return
+    }
+    try {
+      setIsSubmitting(true)
+      const method = editingItem ? 'PUT' : 'POST'
+      const body = editingItem
+        ? { id: editingItem.id, name: formData.name, description: formData.description || null }
+        : { name: formData.name, description: formData.description || null }
+
+      const res = await fetch('/api/jabatan', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menyimpan')
+      }
+
+      toast.success(editingItem ? 'Jabatan diperbarui' : 'Jabatan ditambahkan')
+      setDialogOpen(false)
+      fetchItems()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menyimpan')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      setIsDeleting(true)
+      const res = await fetch(`/api/jabatan?id=${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Gagal menghapus')
+      }
+      toast.success('Jabatan dihapus')
+      setDeleteTarget(null)
+      fetchItems()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Gagal menghapus')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="bg-white/70 dark:bg-gray-900/60">
+            <CardContent className="p-4 space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-6 w-16" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{items.length} jabatan</p>
+        <Button
+          onClick={handleOpenCreate}
+          size="sm"
+          className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+        >
+          <Plus className="size-4 mr-1.5" />
+          Tambah Jabatan
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+          <CardContent className="py-16 flex flex-col items-center space-y-2">
+            <Briefcase className="size-10 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Belum ada data jabatan</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <AnimatePresence mode="popLayout">
+            {items.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+              >
+                <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="size-10 rounded-lg bg-amber-50/80 dark:bg-amber-900/20 flex items-center justify-center shrink-0">
+                          <Briefcase className="size-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+                          {item.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                          item.isActive
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
+                            : 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                        }`}
+                      >
+                        {item.isActive ? 'Aktif' : 'Nonaktif'}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-blue-50 dark:border-blue-900/20">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 bg-amber-50/50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
+                      >
+                        <Users className="size-2.5 mr-0.5" />
+                        {item._count?.users ?? 0} pegawai
+                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          onClick={() => handleOpenEdit(item)}
+                        >
+                          <Pencil className="size-3 text-[#2563eb] dark:text-blue-400" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <Trash2 className="size-3 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+          <DialogHeader>
+            <DialogTitle className="text-[#1e40af] dark:text-blue-300">
+              {editingItem ? 'Edit Jabatan' : 'Tambah Jabatan'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingItem ? 'Perbarui informasi jabatan.' : 'Isi data jabatan baru.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">
+                Nama <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Masukkan nama jabatan"
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">Deskripsi</Label>
+              <Input
+                value={formData.description}
+                onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Masukkan deskripsi (opsional)"
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-blue-200 dark:border-blue-800">
+              Batal
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  Menyimpan...
+                </span>
+              ) : editingItem ? (
+                'Simpan Perubahan'
+              ) : (
+                'Tambah'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="bg-white dark:bg-gray-900 border-red-200/50 dark:border-red-900/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="size-5" />
+              Hapus Jabatan
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700 text-white">
+              {isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
 export function EmployeeManagement() {
   const setCurrentView = useAppStore((s) => s.setCurrentView)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabType>('pegawai')
 
   // Data state
   const [users, setUsers] = useState<User[]>([])
@@ -347,6 +954,10 @@ export function EmployeeManagement() {
 
   // Shifts state
   const [shifts, setShifts] = useState<WorkShift[]>([])
+
+  // Unit Kerja & Jabatan dropdown options
+  const [unitKerjaOptions, setUnitKerjaOptions] = useState<UnitKerja[]>([])
+  const [jabatanOptions, setJabatanOptions] = useState<Jabatan[]>([])
 
   // Reset face confirmation
   const [resetFaceTarget, setResetFaceTarget] = useState<User | null>(null)
@@ -395,12 +1006,20 @@ export function EmployeeManagement() {
     setPage(1)
   }, [search, roleFilter, limit])
 
-  // Load shifts when dialog opens
+  // Load shifts & dropdown options when dialog opens
   useEffect(() => {
     if (dialogOpen) {
       fetch('/api/shifts?includeUsers=true')
         .then((res) => res.json())
         .then((data) => setShifts(data.shifts || []))
+        .catch(() => {})
+      fetch('/api/unit-kerja?limit=100')
+        .then((res) => res.json())
+        .then((data) => setUnitKerjaOptions(data.unitKerja || []))
+        .catch(() => {})
+      fetch('/api/jabatan?limit=100')
+        .then((res) => res.json())
+        .then((data) => setJabatanOptions(data.jabatan || []))
         .catch(() => {})
     }
   }, [dialogOpen])
@@ -423,7 +1042,11 @@ export function EmployeeManagement() {
       role: user.role as Role,
       unitKerja: user.unitKerja ?? '',
       jabatan: user.jabatan ?? '',
+      unitKerjaId: user.unitKerjaId ?? '',
+      jabatanId: user.jabatanId ?? '',
       shiftId: user.shiftId ?? '',
+      mulaiBekerja: user.mulaiBekerja ? new Date(user.mulaiBekerja).toISOString().split('T')[0] : '',
+      tanggalSelesai: user.tanggalSelesai ? new Date(user.tanggalSelesai).toISOString().split('T')[0] : '',
       isActive: user.isActive,
     })
     setShowPassword(false)
@@ -457,7 +1080,11 @@ export function EmployeeManagement() {
           role: formData.role,
           unitKerja: formData.unitKerja || null,
           jabatan: formData.jabatan || null,
+          unitKerjaId: formData.unitKerjaId || null,
+          jabatanId: formData.jabatanId || null,
           shiftId: formData.shiftId || null,
+          mulaiBekerja: formData.mulaiBekerja || null,
+          tanggalSelesai: formData.tanggalSelesai || null,
           isActive: formData.isActive,
         }
         if (formData.password) {
@@ -490,7 +1117,11 @@ export function EmployeeManagement() {
             role: formData.role,
             unitKerja: formData.unitKerja || null,
             jabatan: formData.jabatan || null,
+            unitKerjaId: formData.unitKerjaId || null,
+            jabatanId: formData.jabatanId || null,
             shiftId: formData.shiftId || null,
+            mulaiBekerja: formData.mulaiBekerja || null,
+            tanggalSelesai: formData.tanggalSelesai || null,
           }),
         })
         if (!res.ok) {
@@ -589,10 +1220,10 @@ export function EmployeeManagement() {
   }
 
   // ---- Loading state ----
-  if (isLoading && users.length === 0) return <EmployeeSkeleton />
+  if (isLoading && users.length === 0 && activeTab === 'pegawai') return <EmployeeSkeleton />
 
   // ---- Error state ----
-  if (error && users.length === 0) {
+  if (error && users.length === 0 && activeTab === 'pegawai') {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-4">
         <div className="size-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
@@ -626,316 +1257,402 @@ export function EmployeeManagement() {
             Kelola Pegawai
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {total} pegawai terdaftar
+            {activeTab === 'pegawai'
+              ? `${total} pegawai terdaftar`
+              : activeTab === 'unitKerja'
+                ? 'Kelola unit kerja'
+                : 'Kelola jabatan'}
           </p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
-        >
-          <Plus className="size-4 mr-1.5" />
-          Tambah Pegawai
-        </Button>
-      </motion.div>
-
-      {/* ================================================================= */}
-      {/* Filters                                                           */}
-      {/* ================================================================= */}
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            placeholder="Cari nama, NIP, atau email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-full sm:w-44 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
-            <SelectValue placeholder="Semua Role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Role</SelectItem>
-            <SelectItem value="ADMIN">Admin</SelectItem>
-            <SelectItem value="PEGAWAI">Pegawai</SelectItem>
-          </SelectContent>
-        </Select>
-      </motion.div>
-
-      {/* ================================================================= */}
-      {/* Desktop Table                                                     */}
-      {/* ================================================================= */}
-      <motion.div variants={itemVariants} className="hidden md:block">
-        <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5 overflow-hidden">
-          <ScrollArea className="max-h-[calc(100vh-340px)]">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent bg-blue-50/50 dark:bg-blue-900/10">
-                  <TableHead className="w-12">Foto</TableHead>
-                  <TableHead>NIP</TableHead>
-                  <TableHead>Nama</TableHead>
-                  <TableHead className="hidden lg:table-cell">Email</TableHead>
-                  <TableHead className="hidden xl:table-cell">Unit Kerja</TableHead>
-                  <TableHead className="hidden xl:table-cell">Jabatan</TableHead>
-                  <TableHead className="hidden xl:table-cell">Jam Kerja</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-center">Wajah</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <AnimatePresence mode="popLayout">
-                  {users.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={11} className="h-32 text-center">
-                        <div className="flex flex-col items-center justify-center space-y-2">
-                          <Users className="size-10 text-muted-foreground/30" />
-                          <p className="text-sm text-muted-foreground">
-                            {search || roleFilter !== 'all'
-                              ? 'Tidak ada pegawai yang cocok dengan filter'
-                              : 'Belum ada data pegawai'}
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    users.map((user, idx) => (
-                      <motion.tr
-                        key={user.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10 }}
-                        transition={{ delay: idx * 0.03, duration: 0.25 }}
-                        className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
-                      >
-                        {/* Foto */}
-                        <TableCell>
-                          <Avatar className="size-9 ring-1 ring-blue-100 dark:ring-blue-900/40">
-                            <AvatarImage src={user.photo ?? undefined} alt={user.nama} />
-                            <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 text-xs font-bold">
-                              {getInitials(user.nama)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </TableCell>
-
-                        {/* NIP */}
-                        <TableCell>
-                          <span className="text-xs font-mono text-muted-foreground">{user.nip}</span>
-                        </TableCell>
-
-                        {/* Nama */}
-                        <TableCell>
-                          <span className="text-sm font-medium text-foreground">{user.nama}</span>
-                        </TableCell>
-
-                        {/* Email */}
-                        <TableCell className="hidden lg:table-cell">
-                          <span className="text-xs text-muted-foreground truncate max-w-[180px] block">
-                            {user.email}
-                          </span>
-                        </TableCell>
-
-                        {/* Unit Kerja */}
-                        <TableCell className="hidden xl:table-cell">
-                          <span className="text-xs text-muted-foreground">
-                            {user.unitKerja || '-'}
-                          </span>
-                        </TableCell>
-
-                        {/* Jabatan */}
-                        <TableCell className="hidden xl:table-cell">
-                          <span className="text-xs text-muted-foreground">
-                            {user.jabatan || '-'}
-                          </span>
-                        </TableCell>
-
-                        {/* Jam Kerja */}
-                        <TableCell className="hidden xl:table-cell">
-                          {user.shift ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] px-2 py-0 bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800"
-                            >
-                              <Clock className="size-2.5 mr-0.5" />
-                              {user.shift.name}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-
-                        {/* Role */}
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-2 py-0 ${
-                              user.role === 'ADMIN'
-                                ? 'bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300 border-[#1e40af]/20'
-                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400 border-gray-200 dark:border-gray-700'
-                            }`}
-                          >
-                            {user.role}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Wajah */}
-                        <TableCell className="text-center">
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-2 py-0 ${
-                              user.faceDescriptor
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
-                                : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700'
-                            }`}
-                          >
-                            <Fingerprint className="size-2.5 mr-0.5" />
-                            {user.faceDescriptor ? 'Terdaftar' : 'Belum'}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Status */}
-                        <TableCell className="text-center">
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-2 py-0 ${
-                              user.isActive
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
-                                : 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
-                            }`}
-                          >
-                            {user.isActive ? 'Aktif' : 'Nonaktif'}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Actions */}
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                              >
-                                <span className="sr-only">Buka menu</span>
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="text-muted-foreground">
-                                  <circle cx="8" cy="3" r="1.5" />
-                                  <circle cx="8" cy="8" r="1.5" />
-                                  <circle cx="8" cy="13" r="1.5" />
-                                </svg>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem
-                                onClick={() => handleOpenEdit(user)}
-                                className="cursor-pointer text-[#2563eb] dark:text-blue-400"
-                              >
-                                <Pencil className="size-3.5 mr-2" />
-                                Edit Pegawai
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => setResetFaceTarget(user)}
-                                disabled={!user.faceDescriptor}
-                                className="cursor-pointer text-amber-600 dark:text-amber-400"
-                              >
-                                <RefreshCw className="size-3.5 mr-2" />
-                                Reset Wajah
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleToggleActive(user)}
-                                className="cursor-pointer"
-                              >
-                                {user.isActive ? (
-                                  <>
-                                    <UserX className="size-3.5 mr-2 text-red-500" />
-                                    <span className="text-red-600 dark:text-red-400">Nonaktifkan</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserCheck className="size-3.5 mr-2 text-emerald-500" />
-                                    <span className="text-emerald-600 dark:text-emerald-400">Aktifkan</span>
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => setDeleteTarget(user)}
-                                className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-                              >
-                                <Trash2 className="size-3.5 mr-2" />
-                                Hapus Pegawai
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </motion.tr>
-                    ))
-                  )}
-                </AnimatePresence>
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </Card>
-      </motion.div>
-
-      {/* ================================================================= */}
-      {/* Mobile Cards                                                      */}
-      {/* ================================================================= */}
-      <motion.div variants={itemVariants} className="md:hidden space-y-3">
-        {users.length === 0 ? (
-          <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
-            <CardContent className="py-16 flex flex-col items-center space-y-2">
-              <Users className="size-10 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">
-                {search || roleFilter !== 'all'
-                  ? 'Tidak ada pegawai yang cocok dengan filter'
-                  : 'Belum ada data pegawai'}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <AnimatePresence mode="popLayout">
-            {users.map((user) => (
-              <EmployeeCard
-                key={user.id}
-                user={user}
-                onEdit={handleOpenEdit}
-                onResetFace={setResetFaceTarget}
-                onToggleActive={handleToggleActive}
-                onDelete={setDeleteTarget}
-              />
-            ))}
-          </AnimatePresence>
+        {activeTab === 'pegawai' && (
+          <Button
+            onClick={handleOpenCreate}
+            className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+          >
+            <Plus className="size-4 mr-1.5" />
+            Tambah Pegawai
+          </Button>
         )}
       </motion.div>
 
       {/* ================================================================= */}
-      {/* Pagination                                                        */}
+      {/* Tab Switcher                                                      */}
       {/* ================================================================= */}
       <motion.div variants={itemVariants}>
-        <DataPagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          limit={limit}
-          onPageChange={setPage}
-          onLimitChange={(newLimit) => {
-            setLimit(newLimit)
-            setPage(1)
-          }}
-          isLoading={isLoading}
-          itemLabel="pegawai"
-        />
+        <div className="flex gap-1 p-1 rounded-lg bg-blue-50/50 dark:bg-blue-900/20">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pegawai')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+              activeTab === 'pegawai'
+                ? 'bg-white dark:bg-gray-800 text-[#1e40af] dark:text-blue-300 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users className="size-3.5" />
+            Pegawai
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('unitKerja')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+              activeTab === 'unitKerja'
+                ? 'bg-white dark:bg-gray-800 text-[#1e40af] dark:text-blue-300 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Building2 className="size-3.5" />
+            Unit Kerja
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('jabatan')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+              activeTab === 'jabatan'
+                ? 'bg-white dark:bg-gray-800 text-[#1e40af] dark:text-blue-300 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Briefcase className="size-3.5" />
+            Jabatan
+          </button>
+        </div>
       </motion.div>
+
+      {/* ================================================================= */}
+      {/* Tab Content                                                       */}
+      {/* ================================================================= */}
+      <AnimatePresence mode="wait">
+        {activeTab === 'pegawai' ? (
+          <motion.div
+            key="pegawai"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
+          >
+            {/* ================================================================= */}
+            {/* Filters                                                           */}
+            {/* ================================================================= */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cari nama, NIP, atau email..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-full sm:w-44 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Semua Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Role</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="PEGAWAI">Pegawai</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* ================================================================= */}
+            {/* Desktop Table                                                     */}
+            {/* ================================================================= */}
+            <div className="hidden md:block">
+              <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5 overflow-hidden">
+                <ScrollArea className="max-h-[calc(100vh-440px)]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent bg-blue-50/50 dark:bg-blue-900/10">
+                        <TableHead className="w-12">Foto</TableHead>
+                        <TableHead>NIP</TableHead>
+                        <TableHead>Nama</TableHead>
+                        <TableHead className="hidden lg:table-cell">Email</TableHead>
+                        <TableHead className="hidden xl:table-cell">Unit Kerja</TableHead>
+                        <TableHead className="hidden xl:table-cell">Jabatan</TableHead>
+                        <TableHead className="hidden xl:table-cell">Jam Kerja</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead className="text-center">Wajah</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-right">Aksi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence mode="popLayout">
+                        {users.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={11} className="h-32 text-center">
+                              <div className="flex flex-col items-center justify-center space-y-2">
+                                <Users className="size-10 text-muted-foreground/30" />
+                                <p className="text-sm text-muted-foreground">
+                                  {search || roleFilter !== 'all'
+                                    ? 'Tidak ada pegawai yang cocok dengan filter'
+                                    : 'Belum ada data pegawai'}
+                                </p>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          users.map((user, idx) => (
+                            <motion.tr
+                              key={user.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 10 }}
+                              transition={{ delay: idx * 0.03, duration: 0.25 }}
+                              className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                            >
+                              {/* Foto */}
+                              <TableCell>
+                                <Avatar className="size-9 ring-1 ring-blue-100 dark:ring-blue-900/40">
+                                  <AvatarImage src={user.photo ?? undefined} alt={user.nama} />
+                                  <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 text-xs font-bold">
+                                    {getInitials(user.nama)}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </TableCell>
+
+                              {/* NIP */}
+                              <TableCell>
+                                <span className="text-xs font-mono text-muted-foreground">{user.nip}</span>
+                              </TableCell>
+
+                              {/* Nama */}
+                              <TableCell>
+                                <span className="text-sm font-medium text-foreground">{user.nama}</span>
+                              </TableCell>
+
+                              {/* Email */}
+                              <TableCell className="hidden lg:table-cell">
+                                <span className="text-xs text-muted-foreground truncate max-w-[180px] block">
+                                  {user.email}
+                                </span>
+                              </TableCell>
+
+                              {/* Unit Kerja */}
+                              <TableCell className="hidden xl:table-cell">
+                                <span className="text-xs text-muted-foreground">
+                                  {user.unitKerja || '-'}
+                                </span>
+                              </TableCell>
+
+                              {/* Jabatan */}
+                              <TableCell className="hidden xl:table-cell">
+                                <span className="text-xs text-muted-foreground">
+                                  {user.jabatan || '-'}
+                                </span>
+                              </TableCell>
+
+                              {/* Jam Kerja */}
+                              <TableCell className="hidden xl:table-cell">
+                                {user.shift ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] px-2 py-0 bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800"
+                                  >
+                                    <Clock className="size-2.5 mr-0.5" />
+                                    {user.shift.name}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+
+                              {/* Role */}
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-2 py-0 ${
+                                    user.role === 'ADMIN'
+                                      ? 'bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300 border-[#1e40af]/20'
+                                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                                  }`}
+                                >
+                                  {user.role}
+                                </Badge>
+                              </TableCell>
+
+                              {/* Wajah */}
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-2 py-0 ${
+                                    user.faceDescriptor
+                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
+                                      : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700'
+                                  }`}
+                                >
+                                  <Fingerprint className="size-2.5 mr-0.5" />
+                                  {user.faceDescriptor ? 'Terdaftar' : 'Belum'}
+                                </Badge>
+                              </TableCell>
+
+                              {/* Status */}
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-2 py-0 ${
+                                    user.isActive
+                                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
+                                      : 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                                  }`}
+                                >
+                                  {user.isActive ? 'Aktif' : 'Nonaktif'}
+                                </Badge>
+                              </TableCell>
+
+                              {/* Actions */}
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    >
+                                      <span className="sr-only">Buka menu</span>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="text-muted-foreground">
+                                        <circle cx="8" cy="3" r="1.5" />
+                                        <circle cx="8" cy="8" r="1.5" />
+                                        <circle cx="8" cy="13" r="1.5" />
+                                      </svg>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem
+                                      onClick={() => handleOpenEdit(user)}
+                                      className="cursor-pointer text-[#2563eb] dark:text-blue-400"
+                                    >
+                                      <Pencil className="size-3.5 mr-2" />
+                                      Edit Pegawai
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setResetFaceTarget(user)}
+                                      disabled={!user.faceDescriptor}
+                                      className="cursor-pointer text-amber-600 dark:text-amber-400"
+                                    >
+                                      <RefreshCw className="size-3.5 mr-2" />
+                                      Reset Wajah
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => handleToggleActive(user)}
+                                      className="cursor-pointer"
+                                    >
+                                      {user.isActive ? (
+                                        <>
+                                          <UserX className="size-3.5 mr-2 text-red-500" />
+                                          <span className="text-red-600 dark:text-red-400">Nonaktifkan</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserCheck className="size-3.5 mr-2 text-emerald-500" />
+                                          <span className="text-emerald-600 dark:text-emerald-400">Aktifkan</span>
+                                        </>
+                                      )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => setDeleteTarget(user)}
+                                      className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                                    >
+                                      <Trash2 className="size-3.5 mr-2" />
+                                      Hapus Pegawai
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </motion.tr>
+                          ))
+                        )}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </Card>
+            </div>
+
+            {/* ================================================================= */}
+            {/* Mobile Cards                                                      */}
+            {/* ================================================================= */}
+            <div className="md:hidden space-y-3">
+              {users.length === 0 ? (
+                <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+                  <CardContent className="py-16 flex flex-col items-center space-y-2">
+                    <Users className="size-10 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">
+                      {search || roleFilter !== 'all'
+                        ? 'Tidak ada pegawai yang cocok dengan filter'
+                        : 'Belum ada data pegawai'}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {users.map((user) => (
+                    <EmployeeCard
+                      key={user.id}
+                      user={user}
+                      onEdit={handleOpenEdit}
+                      onResetFace={setResetFaceTarget}
+                      onToggleActive={handleToggleActive}
+                      onDelete={setDeleteTarget}
+                    />
+                  ))}
+                </AnimatePresence>
+              )}
+            </div>
+
+            {/* ================================================================= */}
+            {/* Pagination                                                        */}
+            {/* ================================================================= */}
+            <DataPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              onPageChange={setPage}
+              onLimitChange={(newLimit) => {
+                setLimit(newLimit)
+                setPage(1)
+              }}
+              isLoading={isLoading}
+              itemLabel="pegawai"
+            />
+          </motion.div>
+        ) : activeTab === 'unitKerja' ? (
+          <motion.div
+            key="unitKerja"
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <UnitKerjaTab />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="jabatan"
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <JabatanTab />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ================================================================= */}
       {/* Add / Edit Dialog                                                 */}
@@ -1041,30 +1758,66 @@ export function EmployeeManagement() {
 
             {/* Unit Kerja */}
             <div className="grid gap-2">
-              <Label htmlFor="unitKerja" className="text-sm font-medium">
-                Unit Kerja
-              </Label>
-              <Input
-                id="unitKerja"
-                value={formData.unitKerja}
-                onChange={(e) => setFormData((f) => ({ ...f, unitKerja: e.target.value }))}
-                placeholder="Masukkan unit kerja"
-                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
-              />
+              <Label className="text-sm font-medium">Unit Kerja</Label>
+              <Select
+                value={formData.unitKerjaId || '__none__'}
+                onValueChange={(val) => {
+                  if (val === '__none__') {
+                    setFormData((f) => ({ ...f, unitKerjaId: '', unitKerja: '' }))
+                  } else {
+                    const selected = unitKerjaOptions.find((uk) => uk.id === val)
+                    setFormData((f) => ({
+                      ...f,
+                      unitKerjaId: val,
+                      unitKerja: selected?.name ?? '',
+                    }))
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Pilih unit kerja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Tidak Ada</SelectItem>
+                  {unitKerjaOptions.map((uk) => (
+                    <SelectItem key={uk.id} value={uk.id}>
+                      {uk.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Jabatan */}
             <div className="grid gap-2">
-              <Label htmlFor="jabatan" className="text-sm font-medium">
-                Jabatan
-              </Label>
-              <Input
-                id="jabatan"
-                value={formData.jabatan}
-                onChange={(e) => setFormData((f) => ({ ...f, jabatan: e.target.value }))}
-                placeholder="Masukkan jabatan"
-                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
-              />
+              <Label className="text-sm font-medium">Jabatan</Label>
+              <Select
+                value={formData.jabatanId || '__none__'}
+                onValueChange={(val) => {
+                  if (val === '__none__') {
+                    setFormData((f) => ({ ...f, jabatanId: '', jabatan: '' }))
+                  } else {
+                    const selected = jabatanOptions.find((j) => j.id === val)
+                    setFormData((f) => ({
+                      ...f,
+                      jabatanId: val,
+                      jabatan: selected?.name ?? '',
+                    }))
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Pilih jabatan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Tidak Ada</SelectItem>
+                  {jabatanOptions.map((j) => (
+                    <SelectItem key={j.id} value={j.id}>
+                      {j.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Jam Kerja */}
@@ -1086,6 +1839,30 @@ export function EmployeeManagement() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Mulai Bekerja */}
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">Mulai Bekerja</Label>
+              <Input
+                type="date"
+                value={formData.mulaiBekerja}
+                onChange={(e) => setFormData((f) => ({ ...f, mulaiBekerja: e.target.value }))}
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+              <p className="text-xs text-muted-foreground">Rekap absensi hanya dimulai dari tanggal ini</p>
+            </div>
+
+            {/* Tanggal Selesai */}
+            <div className="grid gap-2">
+              <Label className="text-sm font-medium">Tanggal Selesai</Label>
+              <Input
+                type="date"
+                value={formData.tanggalSelesai}
+                onChange={(e) => setFormData((f) => ({ ...f, tanggalSelesai: e.target.value }))}
+                className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
+              />
+              <p className="text-xs text-muted-foreground">Kosongkan jika masih aktif bekerja</p>
             </div>
 
             {/* Active Switch */}

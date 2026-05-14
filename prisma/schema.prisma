@@ -19,7 +19,11 @@ model User {
   faceRegisteredAt DateTime? // When face was registered
   unitKerja     String?
   jabatan       String?
+  unitKerjaId   String?
+  jabatanId     String?
   shiftId       String?   // Assigned work shift
+  mulaiBekerja  DateTime? // Start working date
+  tanggalSelesai DateTime? // End working date (null = still active)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -27,19 +31,52 @@ model User {
   attendances   Attendance[]
   leaveRequests LeaveRequest[]
   shift         WorkShift? @relation(fields: [shiftId], references: [id])
+  unitKerjaRef  UnitKerja? @relation(fields: [unitKerjaId], references: [id])
+  jabatanRef    Jabatan? @relation(fields: [jabatanId], references: [id])
+}
+
+model UnitKerja {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+}
+
+model Jabatan {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
 }
 
 model Attendance {
   id          String   @id @default(cuid())
   userId      String
   type        String   // MASUK | PULANG
-  latitude    Float
-  longitude   Float
+  latitude    Float    @default(0)
+  longitude   Float    @default(0)
   photo       String?
   confidence  Float    @default(0)
-  status      String   @default("HADIR") // HADIR | TELAT | IZIN | CUTI | ALPHA | DINAS
+  status      String   @default("HADIR") // HADIR | TELAT | IZIN | CUTI | ALPHA | DINAS | PULANG_CEPAT
   note        String?
   shiftId     String?  // Which shift this attendance belongs to
+  isManual    Boolean  @default(false) // true if created manually by admin
+  manualBy    String?  // admin user ID who created it
+  buktiDukung String?  // Supporting document photo (base64 compressed) for admin edit/manual
+  editedBy    String?  // admin user ID who last edited
+  editedAt    DateTime? // when last edited
+  editReason  String?  // reason for the edit
+  isDeleted   Boolean  @default(false) // soft delete flag
+  deletedBy   String?  // admin user ID who deleted
+  deletedAt   DateTime? // when deleted
   createdAt   DateTime @default(now())
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -48,6 +85,7 @@ model Attendance {
   @@index([userId])
   @@index([createdAt])
   @@index([status])
+  @@index([isDeleted])
 }
 
 model Office {
@@ -88,8 +126,13 @@ model OfficeSetting {
   endTime     String   @default("17:00")
   lateTolerance Int    @default(15)
   workDays    String   @default("1,2,3,4,5")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  appName       String   @default("Sistem Absensi Pegawai")
+  logoPath      String?
+  faviconPath   String?
+  pwaIcon192Path String?
+  pwaIcon512Path String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Holiday {
@@ -133,4 +176,19 @@ model LeaveTypeCategory {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   // The user who receives the notification
+  type        String   // leave | late | info | attendance
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  relatedId   String?  // Optional reference to related entity (leave request ID, etc.)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
 }

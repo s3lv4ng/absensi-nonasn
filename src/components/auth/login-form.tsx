@@ -12,7 +12,7 @@ import type { User } from '@/types'
 
 export function LoginForm() {
   const { login } = useAuthStore()
-  const { setCurrentView } = useAppStore()
+  const { setCurrentView, appIdentity } = useAppStore()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -78,11 +78,15 @@ export function LoginForm() {
             transition={{ delay: 0.1, duration: 0.4 }}
             className="flex flex-col items-center mb-8"
           >
-            <div className="flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-[#1e40af] to-[#2563eb] text-white shadow-xl shadow-blue-500/30 mb-4">
-              <Fingerprint className="size-7" />
+            <div className="flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-[#1e40af] to-[#2563eb] text-white shadow-xl shadow-blue-500/30 mb-4 overflow-hidden">
+              {appIdentity.logoPath ? (
+                <img src={appIdentity.logoPath} alt="Logo" className="size-14 object-contain rounded-2xl" />
+              ) : (
+                <Fingerprint className="size-7" />
+              )}
             </div>
             <h1 className="text-xl font-bold text-[#1e3a8a] dark:text-blue-200">
-              Sistem Absensi Pegawai
+              {appIdentity.appName}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Masuk ke akun Anda</p>
           </motion.div>

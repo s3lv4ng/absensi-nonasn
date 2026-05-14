@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { getJakartaTime, createJakartaDate } from '@/lib/timezone'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,17 +14,17 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId') || authUser.userId
     const effectiveUserId = authUser.role !== 'ADMIN' ? authUser.userId : userId
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    // Use Jakarta timezone for "today" boundaries
+    const nowJakarta = getJakartaTime(new Date())
+    const todayStartUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day, 0, 0)
+    const todayEndUtc = createJakartaDate(nowJakarta.year, nowJakarta.month, nowJakarta.day + 1, 0, 0)
 
     const todayAttendance = await db.attendance.findMany({
       where: {
         userId: effectiveUserId,
         createdAt: {
-          gte: today,
-          lt: tomorrow,
+          gte: todayStartUtc,
+          lt: todayEndUtc,
         },
       },
       orderBy: { createdAt: 'asc' },

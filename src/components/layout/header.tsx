@@ -10,6 +10,8 @@ import {
   UserCircle,
   LayoutDashboard,
   Clock,
+  CheckCheck,
+  Trash2,
 } from 'lucide-react'
 import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
@@ -17,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { toast } from 'sonner'
 
 const viewTitles: Record<AppView, string> = {
   landing: 'Selamat Datang',
@@ -35,27 +39,38 @@ const viewTitles: Record<AppView, string> = {
   'employee-history': 'Riwayat Absensi',
   'employee-profile': 'Profil',
   'employee-leaves': 'Pengajuan Izin/Cuti',
+  'employee-monitoring': 'Monitor Kehadiran',
   'admin-dashboard': 'Dashboard Admin',
   'admin-employees': 'Kelola Pegawai',
   'admin-attendance': 'Monitoring Absensi',
   'admin-settings': 'Pengaturan',
-  'admin-reports': 'Laporan',
   'admin-leaves': 'Izin / Cuti / Dinas',
-  'admin-offices': 'Lokasi Kantor',
-  'admin-shifts': 'Jam Kerja',
-  'admin-employee-report': 'Laporan Pegawai',
+  'admin-rekap-absen': 'Cetak Rekap Absen',
+}
+
+interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  message: string
+  time: string
+  read: boolean
+  relatedId?: string | null
 }
 
 export function AppHeader() {
   const { user, hasRole, logout } = useAuthStore()
-  const { currentView, toggleSidebar } = useAppStore()
+  const { currentView, toggleSidebar, appIdentity } = useAppStore()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [currentTime, setCurrentTime] = useState<string>('')
   const [currentDate, setCurrentDate] = useState<string>('')
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   useEffect(() => {
-    // Clock subscription — setState is in interval callback (external system subscription)
+    // Clock subscription
     const updateClock = () => {
       const now = new Date()
       setCurrentTime(
@@ -76,7 +91,6 @@ export function AppHeader() {
       )
     }
 
-    // Initial update via setTimeout to avoid synchronous setState in effect body
     const timeoutId = setTimeout(() => {
       updateClock()
       setMounted(true)
@@ -89,6 +103,82 @@ export function AppHeader() {
     }
   }, [])
 
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!user) return
+    try {
+      const res = await fetch('/api/notifications')
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data.notifications || [])
+        setUnreadCount(data.unreadCount || 0)
+      }
+    } catch {
+      // Silent fail
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return
+    const doFetch = () => { fetchNotifications() }
+    const timeout = setTimeout(doFetch, 0)
+    const interval = setInterval(doFetch, 60000) // Refresh every 60s
+    return () => { clearTimeout(timeout); clearInterval(interval) }
+  }, [user])
+
+  // Mark all as read
+  const handleMarkAllRead = async () => {
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markAllRead' }),
+      })
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+        setUnreadCount(0)
+        toast.success('Semua notifikasi ditandai sudah dibaca')
+      }
+    } catch {
+      toast.error('Gagal menandai notifikasi')
+    }
+  }
+
+  // Clear all notifications
+  const handleClearAll = async () => {
+    try {
+      const res = await fetch('/api/notifications?action=clearAll', {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        setNotifications([])
+        setUnreadCount(0)
+        toast.success('Semua notifikasi dihapus')
+      }
+    } catch {
+      toast.error('Gagal menghapus notifikasi')
+    }
+  }
+
+  // Mark single as read on click
+  const handleNotifClick = async (notif: NotificationItem) => {
+    if (!notif.read) {
+      try {
+        await fetch('/api/notifications', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'markRead', notificationId: notif.id }),
+        })
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+        )
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+      } catch {
+        // silent
+      }
+    }
+  }
+
   const isAdmin = hasRole('ADMIN')
   const title = viewTitles[currentView] ?? 'Dashboard'
 
@@ -99,6 +189,20 @@ export function AppHeader() {
       .join('')
       .toUpperCase()
       .slice(0, 2)
+  }
+
+  // Get notification icon/color based on type
+  const getNotifStyle = (type: string) => {
+    switch (type) {
+      case 'leave':
+        return 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+      case 'late':
+        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+      case 'attendance':
+        return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+      default:
+        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+    }
   }
 
   return (
@@ -151,7 +255,7 @@ export function AppHeader() {
         </Button>
 
         {/* Notification bell */}
-        <DropdownMenu>
+        <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -159,35 +263,94 @@ export function AppHeader() {
               className="relative size-8 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/50 text-[#1e40af] dark:text-blue-400"
             >
               <Bell className="size-4" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white dark:ring-gray-900">
-                3
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white dark:ring-gray-900 animate-pulse">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
               <span className="sr-only">Notifikasi</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel className="flex items-center justify-between">
-              <span>Notifikasi</span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-[#1e40af]/10 text-[#1e40af]">
-                3 baru
-              </Badge>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 cursor-pointer">
-              <span className="text-sm font-medium">Izin Cuti Baru</span>
-              <span className="text-xs text-muted-foreground">Ahmad mengajukan izin cuti</span>
-              <span className="text-[10px] text-muted-foreground">5 menit yang lalu</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 cursor-pointer">
-              <span className="text-sm font-medium">Keterlambatan</span>
-              <span className="text-xs text-muted-foreground">3 pegawai terlambat hari ini</span>
-              <span className="text-[10px] text-muted-foreground">1 jam yang lalu</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 cursor-pointer">
-              <span className="text-sm font-medium">Absensi Selesai</span>
-              <span className="text-xs text-muted-foreground">Laporan harian tersedia</span>
-              <span className="text-[10px] text-muted-foreground">3 jam yang lalu</span>
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-80 p-0">
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100/50 dark:border-blue-900/30">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">Notifikasi</span>
+                {unreadCount > 0 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300">
+                    {unreadCount} baru
+                  </Badge>
+                )}
+              </div>
+              {notifications.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {unreadCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 text-[10px] text-[#1e40af] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                      onClick={handleMarkAllRead}
+                    >
+                      <CheckCheck className="size-3 mr-0.5" />
+                      Baca Semua
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[10px] text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                    onClick={handleClearAll}
+                  >
+                    <Trash2 className="size-3 mr-0.5" />
+                    Hapus
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Notification list */}
+            {notifications.length === 0 ? (
+              <div className="py-6 text-center">
+                <Bell className="size-8 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">Tidak ada notifikasi</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[320px]">
+                <div className="py-1">
+                  {notifications.map((notif) => (
+                    <button
+                      key={notif.id}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition-colors border-b border-blue-50/50 dark:border-blue-900/20 last:border-0 ${
+                        !notif.read ? 'bg-blue-50/30 dark:bg-blue-950/20' : ''
+                      }`}
+                      onClick={() => handleNotifClick(notif)}
+                    >
+                      <div className="flex items-start gap-2">
+                        {/* Unread dot */}
+                        <div className="mt-1.5 shrink-0">
+                          {!notif.read ? (
+                            <span className="block size-2 rounded-full bg-[#1e40af] dark:bg-blue-400" />
+                          ) : (
+                            <span className="block size-2 rounded-full bg-transparent" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs leading-tight ${!notif.read ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'}`}>
+                            {notif.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                            {notif.message}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">
+                            {notif.time}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

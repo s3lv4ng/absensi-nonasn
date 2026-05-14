@@ -5,16 +5,11 @@ import {
   Users,
   Monitor,
   Settings,
-  FileBarChart,
   ClipboardCheck,
   History,
   UserCircle,
   LogOut,
   Fingerprint,
-  MapPin,
-  Clock,
-  UserCheck,
-  Tag,
   Eye,
   TableProperties,
 } from 'lucide-react'
@@ -77,24 +72,9 @@ const managementItems: NavItem[] = [
     view: 'admin-leaves',
     icon: ClipboardCheck,
   },
-  {
-    title: 'Tipe Cuti/Izin',
-    view: 'admin-leave-types',
-    icon: Tag,
-  },
 ]
 
 const reportItems: NavItem[] = [
-  {
-    title: 'Laporan',
-    view: 'admin-reports',
-    icon: FileBarChart,
-  },
-  {
-    title: 'Laporan Pegawai',
-    view: 'admin-employee-report',
-    icon: UserCheck,
-  },
   {
     title: 'Cetak Rekap Absen',
     view: 'admin-rekap-absen',
@@ -103,16 +83,6 @@ const reportItems: NavItem[] = [
 ]
 
 const settingItems: NavItem[] = [
-  {
-    title: 'Lokasi Kantor',
-    view: 'admin-offices',
-    icon: MapPin,
-  },
-  {
-    title: 'Jam Kerja',
-    view: 'admin-shifts',
-    icon: Clock,
-  },
   {
     title: 'Pengaturan',
     view: 'admin-settings',
@@ -190,7 +160,7 @@ function NavItemRenderer({ item, isActive, onClick }: { item: NavItem; isActive:
 
 export function AppSidebar() {
   const { user, hasRole, logout } = useAuthStore()
-  const { currentView, setCurrentView, sidebarOpen, setSidebarOpen } = useAppStore()
+  const { currentView, setCurrentView, sidebarOpen, setSidebarOpen, appIdentity } = useAppStore()
 
   const isAdmin = hasRole('ADMIN')
 
@@ -220,15 +190,19 @@ export function AppSidebar() {
               size="lg"
               className="hover:bg-white/10"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#1e40af] text-white shadow-md">
-                <Fingerprint className="size-4" />
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#1e40af] text-white shadow-md overflow-hidden">
+                {appIdentity.logoPath ? (
+                  <img src={appIdentity.logoPath} alt="Logo" className="size-8 object-contain rounded-lg" />
+                ) : (
+                  <Fingerprint className="size-4" />
+                )}
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-bold text-[#1e3a8a] dark:text-blue-300">
-                  Absensi
+                  {appIdentity.appName.length > 12 ? appIdentity.appName.split(' ').slice(0, 2).join(' ') : appIdentity.appName}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  Sistem Pegawai
+                  {appIdentity.officeName}
                 </span>
               </div>
             </SidebarMenuButton>

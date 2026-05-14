@@ -16,6 +16,16 @@ import {
   X,
   ImageIcon,
   Navigation,
+  PenLine,
+  Pencil,
+  Trash2,
+  Upload,
+  ShieldCheck,
+  AlertTriangle,
+  FileCheck,
+  Eye,
+  EyeOff,
+  ChevronDown,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
@@ -25,14 +35,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -49,7 +63,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ManualAttendanceDialog } from '@/components/admin/manual-attendance-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,6 +177,20 @@ function confidenceColor(confidence: number) {
   return '#ef4444'
 }
 
+function haversineDistanceSimple(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const φ1 = toRad(lat1)
+  const φ2 = toRad(lat2)
+  const Δφ = toRad(lat2 - lat1)
+  const Δλ = toRad(lon2 - lon1)
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
 // ---------------------------------------------------------------------------
 // Loading Skeleton
 // ---------------------------------------------------------------------------
@@ -191,6 +230,50 @@ function MonitoringSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
+// Admin Marker Badge
+// ---------------------------------------------------------------------------
+
+function AdminMarkerBadges({ attendance }: { attendance: Attendance }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {attendance.isManual && (
+        <Badge className="bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 border-teal-200 dark:border-teal-800 text-[9px] px-1.5 py-0 gap-0.5">
+          <PenLine className="size-2.5" />
+          Manual
+          {attendance.manualByUser && (
+            <span className="font-normal">by {attendance.manualByUser.nama}</span>
+          )}
+        </Badge>
+      )}
+      {attendance.editedBy && (
+        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-[9px] px-1.5 py-0 gap-0.5">
+          <Pencil className="size-2.5" />
+          Diedit
+          {attendance.editedByUser && (
+            <span className="font-normal">by {attendance.editedByUser.nama}</span>
+          )}
+        </Badge>
+      )}
+      {attendance.isDeleted && (
+        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800 text-[9px] px-1.5 py-0 gap-0.5">
+          <Trash2 className="size-2.5" />
+          Dihapus
+          {attendance.deletedByUser && (
+            <span className="font-normal">by {attendance.deletedByUser.nama}</span>
+          )}
+        </Badge>
+      )}
+      {attendance.buktiDukung && (
+        <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[9px] px-1.5 py-0 gap-0.5">
+          <FileCheck className="size-2.5" />
+          Bukti
+        </Badge>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Attendance Detail Dialog
 // ---------------------------------------------------------------------------
 
@@ -219,7 +302,7 @@ function AttendanceDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+      <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
             <Activity className="size-5" />
@@ -228,6 +311,9 @@ function AttendanceDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Admin Markers */}
+          <AdminMarkerBadges attendance={attendance} />
+
           {/* Employee Info */}
           <div className="flex items-center gap-3">
             <Avatar className="size-14 ring-2 ring-blue-100 dark:ring-blue-900/40">
@@ -282,6 +368,41 @@ function AttendanceDetailDialog({
               <DetailItem label="Jarak dari Kantor" value={`${Math.round(distance)}m`} />
             )}
           </div>
+
+          {/* Edited info */}
+          {attendance.editedBy && (
+            <div className="p-3 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Pencil className="size-3.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Diedit oleh Admin</span>
+              </div>
+              {attendance.editedByUser && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">{attendance.editedByUser.nama}</p>
+              )}
+              {attendance.editedAt && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {new Date(attendance.editedAt).toLocaleString('id-ID')}
+                </p>
+              )}
+              {attendance.editReason && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Alasan: {attendance.editReason}</p>
+              )}
+            </div>
+          )}
+
+          {/* Bukti Dukung */}
+          {attendance.buktiDukung && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bukti Dukung</p>
+              <div className="rounded-xl overflow-hidden border border-indigo-100/50 dark:border-indigo-900/30 bg-gray-50 dark:bg-gray-800">
+                <img
+                  src={attendance.buktiDukung}
+                  alt="Bukti dukung"
+                  className="w-full max-h-64 object-cover"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Photo */}
           {attendance.photo && (
@@ -342,18 +463,289 @@ function DetailItem({ label, value }: { label: string; value: React.ReactNode })
   )
 }
 
-function haversineDistanceSimple(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000
-  const toRad = (deg: number) => (deg * Math.PI) / 180
-  const φ1 = toRad(lat1)
-  const φ2 = toRad(lat2)
-  const Δφ = toRad(lat2 - lat1)
-  const Δλ = toRad(lon2 - lon1)
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
+// ---------------------------------------------------------------------------
+// Edit Attendance Dialog
+// ---------------------------------------------------------------------------
+
+function EditAttendanceDialog({
+  attendance,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  attendance: Attendance | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+}) {
+  const [status, setStatus] = useState<string>('')
+  const [type, setType] = useState<string>('')
+  const [note, setNote] = useState<string>('')
+  const [editReason, setEditReason] = useState<string>('')
+  const [buktiDukung, setBuktiDukung] = useState<string | null>(null)
+  const [buktiPreview, setBuktiPreview] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Reset when attendance changes or dialog opens
+  useEffect(() => {
+    if (attendance && open) {
+      setStatus(attendance.status)
+      setType(attendance.type)
+      setNote(attendance.note || '')
+      setEditReason('')
+      setBuktiDukung(null)
+      setBuktiPreview(attendance.buktiDukung || null)
+    }
+  }, [attendance, open])
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Hanya file gambar yang diizinkan')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      setBuktiDukung(result)
+      setBuktiPreview(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    if (!attendance) return
+
+    if (!editReason.trim()) {
+      toast.error('Alasan edit wajib diisi')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(`/api/attendance/${attendance.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          type,
+          note: note.trim() || null,
+          editReason: editReason.trim(),
+          buktiDukung: buktiDukung || undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal mengedit absensi')
+      }
+
+      toast.success('Absensi berhasil diperbarui', {
+        description: data.message,
+      })
+
+      onOpenChange(false)
+      onSuccess()
+    } catch (err: any) {
+      toast.error('Gagal mengedit absensi', {
+        description: err.message || 'Terjadi kesalahan',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (!attendance) return null
+
+  const statusOptions = [
+    { value: 'HADIR', label: 'Hadir' },
+    { value: 'TELAT', label: 'Telat' },
+    { value: 'IZIN', label: 'Izin' },
+    { value: 'CUTI', label: 'Cuti' },
+    { value: 'ALPHA', label: 'Alpha' },
+    { value: 'DINAS', label: 'Dinas' },
+    { value: 'PULANG_CEPAT', label: 'Pulang Cepat' },
+  ]
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30 max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
+            <Pencil className="size-5" />
+            Edit Absensi
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Edit absensi {attendance.user?.nama ?? ''} — {formatShortDate(attendance.createdAt)}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Employee info */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-900/30">
+            <Avatar className="size-10 ring-2 ring-blue-100 dark:ring-blue-900/40">
+              <AvatarImage src={attendance.user?.photo ?? undefined} alt={attendance.user?.nama ?? ''} />
+              <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 font-bold text-xs">
+                {getInitials(attendance.user?.nama ?? '??')}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-sm font-semibold text-foreground">{attendance.user?.nama ?? 'Unknown'}</p>
+              <p className="text-xs text-muted-foreground font-mono">{attendance.user?.nip ?? '-'}</p>
+            </div>
+          </div>
+
+          <Separator className="bg-blue-50 dark:bg-blue-900/20" />
+
+          {/* Type & Status Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tipe</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="bg-white/70 dark:bg-gray-900/60 border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Pilih tipe" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MASUK">Masuk</SelectItem>
+                  <SelectItem value="PULANG">Pulang</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="bg-white/70 dark:bg-gray-900/60 border-blue-100/50 dark:border-blue-900/30">
+                  <SelectValue placeholder="Pilih status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Note */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Catatan</Label>
+            <Textarea
+              placeholder="Catatan tambahan..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="bg-white/70 dark:bg-gray-900/60 border-blue-100/50 dark:border-blue-900/30 min-h-[60px]"
+            />
+          </div>
+
+          <Separator className="bg-blue-50 dark:bg-blue-900/20" />
+
+          {/* Edit Reason - REQUIRED */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5 text-amber-500" />
+              Alasan Edit <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              placeholder="Wajib isi alasan perubahan absensi ini..."
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+              className="bg-white/70 dark:bg-gray-900/60 border-amber-200/50 dark:border-amber-800/30 min-h-[60px] focus:border-amber-400"
+            />
+          </div>
+
+          {/* Bukti Dukung Upload */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-1.5">
+              <Upload className="size-3.5" />
+              Upload Bukti Dukung <span className="text-xs text-muted-foreground font-normal">(opsional)</span>
+            </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full border-dashed border-2 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-20"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Upload className="size-5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Klik untuk upload gambar</span>
+              </div>
+            </Button>
+            {buktiPreview && (
+              <div className="relative rounded-lg overflow-hidden border border-blue-100/50 dark:border-blue-900/30">
+                <img
+                  src={buktiPreview}
+                  alt="Preview bukti dukung"
+                  className="w-full max-h-40 object-cover"
+                />
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="absolute top-2 right-2 size-7 p-0"
+                  onClick={() => {
+                    setBuktiDukung(null)
+                    setBuktiPreview(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                  }}
+                >
+                  <X className="size-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Info banner */}
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30">
+            <ShieldCheck className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Perubahan akan dicatat dengan nama admin sebagai penanggung jawab edit. Alasan edit wajib diisi.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="border-blue-200 dark:border-blue-800"
+            disabled={isSubmitting}
+          >
+            Batal
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !editReason.trim()}
+            className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+          >
+            {isSubmitting ? 'Menyimpan...' : (
+              <>
+                <Pencil className="size-4 mr-1.5" />
+                Simpan Perubahan
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -364,10 +756,14 @@ function AttendanceCard({
   attendance,
   onClick,
   officeSetting,
+  onEdit,
+  onDelete,
 }: {
   attendance: Attendance
   onClick: () => void
   officeSetting: OfficeSetting | null
+  onEdit: (e: React.MouseEvent) => void
+  onDelete: (e: React.MouseEvent) => void
 }) {
   const distance = officeSetting
     ? haversineDistanceSimple(
@@ -383,74 +779,104 @@ function AttendanceCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      onClick={onClick}
-      className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-4 shadow-sm cursor-pointer hover:shadow-md hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
+      className={`rounded-xl border bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl shadow-sm transition-all ${
+        attendance.isDeleted
+          ? 'border-red-200/50 dark:border-red-900/30 opacity-60'
+          : 'border-blue-100/50 dark:border-blue-900/30 hover:shadow-md hover:bg-blue-50/30 dark:hover:bg-blue-900/10'
+      }`}
     >
-      <div className="flex items-start gap-3">
-        <Avatar className="size-11 ring-2 ring-blue-100 dark:ring-blue-900/40 shrink-0">
-          <AvatarImage src={attendance.user?.photo ?? undefined} alt={attendance.user?.nama ?? ''} />
-          <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 font-bold text-xs">
-            {getInitials(attendance.user?.nama ?? '??')}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {attendance.user?.nama ?? 'Unknown'}
-            </p>
-            <div className="flex items-center gap-1 shrink-0">
-              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${typeBadgeClass(attendance.type)}`}>
-                {attendance.type === 'MASUK' ? 'Masuk' : 'Pulang'}
-              </Badge>
-              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColor(attendance.status)}`}>
-                {attendance.status}
-              </Badge>
+      <div className="p-4 cursor-pointer" onClick={onClick}>
+        <div className="flex items-start gap-3">
+          <Avatar className="size-11 ring-2 ring-blue-100 dark:ring-blue-900/40 shrink-0">
+            <AvatarImage src={attendance.user?.photo ?? undefined} alt={attendance.user?.nama ?? ''} />
+            <AvatarFallback className="bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-400 font-bold text-xs">
+              {getInitials(attendance.user?.nama ?? '??')}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {attendance.user?.nama ?? 'Unknown'}
+              </p>
+              <div className="flex items-center gap-1 shrink-0">
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${typeBadgeClass(attendance.type)}`}>
+                  {attendance.type === 'MASUK' ? 'Masuk' : 'Pulang'}
+                </Badge>
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColor(attendance.status)}`}>
+                  {attendance.status}
+                </Badge>
+              </div>
             </div>
-          </div>
-          <p className="text-xs text-muted-foreground font-mono">{attendance.user?.nip ?? '-'}</p>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Clock className="size-3" />
-              {formatTime(attendance.createdAt)}
-            </span>
-            {distance !== null && (
+            <p className="text-xs text-muted-foreground font-mono">{attendance.user?.nip ?? '-'}</p>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <MapPin className="size-3" />
-                {Math.round(distance)}m
+                <Clock className="size-3" />
+                {formatTime(attendance.createdAt)}
               </span>
+              {distance !== null && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="size-3" />
+                  {Math.round(distance)}m
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Fingerprint className="size-3" />
+                {Math.round(attendance.confidence * 100)}%
+              </span>
+            </div>
+            {/* Late/Early minutes indicators */}
+            {(attendance.lateMinutes && attendance.lateMinutes > 0) || (attendance.earlyMinutes && attendance.earlyMinutes > 0) ? (
+              <div className="flex items-center gap-2 mt-1">
+                {attendance.lateMinutes && attendance.lateMinutes > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    Terlambat {attendance.lateMinutes}m
+                  </span>
+                )}
+                {attendance.earlyMinutes && attendance.earlyMinutes > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
+                    Pulang Cepat {attendance.earlyMinutes}m
+                  </span>
+                )}
+              </div>
+            ) : null}
+            {/* Admin Markers */}
+            <AdminMarkerBadges attendance={attendance} />
+            {/* Thumbnail photo */}
+            {attendance.photo && (
+              <div className="mt-2">
+                <img
+                  src={attendance.photo}
+                  alt="Foto"
+                  className="size-14 rounded-lg object-cover border border-blue-100/50 dark:border-blue-900/30"
+                />
+              </div>
             )}
-            <span className="flex items-center gap-1">
-              <Fingerprint className="size-3" />
-              {Math.round(attendance.confidence * 100)}%
-            </span>
           </div>
-          {/* Late/Early minutes indicators */}
-          {(attendance.lateMinutes && attendance.lateMinutes > 0) || (attendance.earlyMinutes && attendance.earlyMinutes > 0) ? (
-            <div className="flex items-center gap-2 mt-1">
-              {attendance.lateMinutes && attendance.lateMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  Terlambat {attendance.lateMinutes}m
-                </span>
-              )}
-              {attendance.earlyMinutes && attendance.earlyMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
-                  Pulang Cepat {attendance.earlyMinutes}m
-                </span>
-              )}
-            </div>
-          ) : null}
-          {/* Thumbnail photo */}
-          {attendance.photo && (
-            <div className="mt-2">
-              <img
-                src={attendance.photo}
-                alt="Foto"
-                className="size-14 rounded-lg object-cover border border-blue-100/50 dark:border-blue-900/30"
-              />
-            </div>
-          )}
         </div>
       </div>
+      {/* Action buttons */}
+      {!attendance.isDeleted && (
+        <div className="flex items-center justify-end gap-2 px-4 pb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onEdit}
+            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 h-7 px-2"
+          >
+            <Pencil className="size-3 mr-1" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 px-2"
+          >
+            <Trash2 className="size-3 mr-1" />
+            Hapus
+          </Button>
+        </div>
+      )}
     </motion.div>
   )
 }
@@ -469,16 +895,32 @@ export function AttendanceMonitoring() {
   const [error, setError] = useState<string | null>(null)
   const [officeSetting, setOfficeSetting] = useState<OfficeSetting | null>(null)
 
-  // Filter state
-  const [dateFilter, setDateFilter] = useState(() => {
-    const today = new Date()
-    return today.toISOString().split('T')[0]
-  })
+  // Filter state — date range
+  const now = new Date()
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+
+  const [startDate, setStartDate] = useState<string>(firstDayOfMonth)
+  const [endDate, setEndDate] = useState<string>(lastDayOfMonth)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [searchName, setSearchName] = useState<string>('')
+  const [showDeleted, setShowDeleted] = useState(false)
 
   // Detail dialog
   const [selectedAttendance, setSelectedAttendance] = useState<Attendance | null>(null)
+
+  // Edit dialog
+  const [editAttendance, setEditAttendance] = useState<Attendance | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  // Delete confirmation
+  const [deleteAttendance, setDeleteAttendance] = useState<Attendance | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Manual attendance dialog
+  const [manualDialogOpen, setManualDialogOpen] = useState(false)
 
   // Auto refresh
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -511,13 +953,12 @@ export function AttendanceMonitoring() {
       const params = new URLSearchParams()
       params.set('page', String(page))
       params.set('limit', String(limit))
-      // For admin, don't set userId to get all
-      if (dateFilter) {
-        params.set('startDate', dateFilter)
-        params.set('endDate', dateFilter)
-      }
+      if (startDate) params.set('startDate', startDate)
+      if (endDate) params.set('endDate', endDate)
       if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
       if (typeFilter && typeFilter !== 'all') params.set('type', typeFilter)
+      if (searchName.trim()) params.set('searchName', searchName.trim())
+      if (showDeleted) params.set('showDeleted', 'true')
 
       const res = await fetch(`/api/attendance?${params.toString()}`)
       if (!res.ok) {
@@ -539,7 +980,7 @@ export function AttendanceMonitoring() {
     } finally {
       setIsLoading(false)
     }
-  }, [page, dateFilter, statusFilter, typeFilter, limit])
+  }, [page, startDate, endDate, statusFilter, typeFilter, searchName, showDeleted, limit])
 
   useEffect(() => {
     fetchAttendances()
@@ -548,7 +989,7 @@ export function AttendanceMonitoring() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1)
-  }, [dateFilter, statusFilter, typeFilter, limit])
+  }, [startDate, endDate, statusFilter, typeFilter, searchName, showDeleted, limit])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -559,6 +1000,37 @@ export function AttendanceMonitoring() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [fetchAttendances])
+
+  // ---- Delete handler ----
+  const handleDelete = async () => {
+    if (!deleteAttendance) return
+
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/attendance/${deleteAttendance.id}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal menghapus absensi')
+      }
+
+      toast.success('Absensi berhasil dihapus', {
+        description: `Admin menghapus absensi ${deleteAttendance.user?.nama ?? ''}`,
+      })
+
+      setDeleteDialogOpen(false)
+      setDeleteAttendance(null)
+      fetchAttendances()
+    } catch (err: any) {
+      toast.error('Gagal menghapus absensi', {
+        description: err.message || 'Terjadi kesalahan',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   // ---- Loading state ----
   if (isLoading && attendances.length === 0) return <MonitoringSkeleton />
@@ -598,11 +1070,19 @@ export function AttendanceMonitoring() {
             Monitoring Absensi
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {formatDate(dateFilter + 'T00:00:00')} &bull; Terakhir diperbarui:{' '}
+            {formatShortDate(startDate + 'T00:00:00')} — {formatShortDate(endDate + 'T00:00:00')} &bull; Terakhir diperbarui:{' '}
             {lastRefresh.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            onClick={() => setManualDialogOpen(true)}
+            size="sm"
+            className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+          >
+            <PenLine className="size-3.5 mr-1" />
+            Absensi Manual
+          </Button>
           <Badge className="bg-[#1e40af] hover:bg-[#1e3a8a] text-white px-3 py-1 text-xs shadow-lg shadow-blue-500/25">
             <Activity className="size-3 mr-1" />
             Auto-refresh 30s
@@ -623,42 +1103,94 @@ export function AttendanceMonitoring() {
       {/* ================================================================= */}
       {/* Filters                                                           */}
       {/* ================================================================= */}
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row gap-3">
-        <div className="relative">
-          <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600 w-full sm:w-auto"
-          />
+      <motion.div variants={itemVariants} className="space-y-3">
+        {/* Row 1: Date range + name search */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari nama pegawai..."
+              value={searchName}
+              onChange={(e) => setSearchName(e.target.value)}
+              className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600"
+            />
+            {searchName && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 size-7 p-0"
+                onClick={() => setSearchName('')}
+              >
+                <X className="size-3" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-40 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
-            <SelectValue placeholder="Semua Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="HADIR">Hadir</SelectItem>
-            <SelectItem value="TELAT">Telat</SelectItem>
-            <SelectItem value="PULANG_CEPAT">Pulang Cepat</SelectItem>
-            <SelectItem value="IZIN">Izin</SelectItem>
-            <SelectItem value="CUTI">Cuti</SelectItem>
-            <SelectItem value="ALPHA">Alpha</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Row 2: Date range + status + type + show deleted */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600 w-full sm:w-auto"
+              />
+            </div>
+            <span className="text-sm text-muted-foreground">s/d</span>
+            <div className="relative">
+              <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="pl-9 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 focus:border-[#2563eb] dark:focus:border-blue-600 w-full sm:w-auto"
+              />
+            </div>
+          </div>
 
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-full sm:w-40 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
-            <SelectValue placeholder="Semua Tipe" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Tipe</SelectItem>
-            <SelectItem value="MASUK">Masuk</SelectItem>
-            <SelectItem value="PULANG">Pulang</SelectItem>
-          </SelectContent>
-        </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-40 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+              <SelectValue placeholder="Semua Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Status</SelectItem>
+              <SelectItem value="HADIR">Hadir</SelectItem>
+              <SelectItem value="TELAT">Telat</SelectItem>
+              <SelectItem value="PULANG_CEPAT">Pulang Cepat</SelectItem>
+              <SelectItem value="IZIN">Izin</SelectItem>
+              <SelectItem value="CUTI">Cuti</SelectItem>
+              <SelectItem value="ALPHA">Alpha</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-full sm:w-36 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30">
+              <SelectValue placeholder="Semua Tipe" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Tipe</SelectItem>
+              <SelectItem value="MASUK">Masuk</SelectItem>
+              <SelectItem value="PULANG">Pulang</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant={showDeleted ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowDeleted(!showDeleted)}
+            className={`gap-1.5 ${
+              showDeleted
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+            }`}
+          >
+            {showDeleted ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+            {showDeleted ? 'Sembunyikan Dihapus' : 'Tampilkan Dihapus'}
+          </Button>
+        </div>
       </motion.div>
 
       {/* ================================================================= */}
@@ -666,7 +1198,7 @@ export function AttendanceMonitoring() {
       {/* ================================================================= */}
       <motion.div variants={itemVariants} className="hidden md:block">
         <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5 overflow-hidden">
-          <ScrollArea className="max-h-[calc(100vh-360px)]">
+          <ScrollArea className="max-h-[calc(100vh-400px)]">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent bg-blue-50/50 dark:bg-blue-900/10">
@@ -677,10 +1209,10 @@ export function AttendanceMonitoring() {
                   <TableHead>Status</TableHead>
                   <TableHead className="text-center">Terlambat</TableHead>
                   <TableHead className="text-center">P. Cepat</TableHead>
-                  <TableHead className="hidden lg:table-cell">Lokasi</TableHead>
+                  <TableHead>Penanda</TableHead>
                   <TableHead className="hidden xl:table-cell">Foto</TableHead>
-                  <TableHead className="hidden lg:table-cell">Confidence</TableHead>
                   <TableHead className="hidden xl:table-cell">Jarak</TableHead>
+                  <TableHead className="text-center">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -714,7 +1246,11 @@ export function AttendanceMonitoring() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 10 }}
                           transition={{ delay: idx * 0.03, duration: 0.25 }}
-                          className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors cursor-pointer"
+                          className={`border-b transition-colors cursor-pointer ${
+                            att.isDeleted
+                              ? 'border-red-100 dark:border-red-900/20 bg-red-50/20 dark:bg-red-900/5 hover:bg-red-50/40 dark:hover:bg-red-900/10'
+                              : 'border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10'
+                          }`}
                           onClick={() => setSelectedAttendance(att)}
                         >
                           {/* Pegawai */}
@@ -780,22 +1316,34 @@ export function AttendanceMonitoring() {
                             )}
                           </TableCell>
 
-                          {/* Lokasi */}
-                          <TableCell className="hidden lg:table-cell">
-                            {att.latitude && att.longitude ? (
-                              <a
-                                href={`https://www.google.com/maps?q=${att.latitude},${att.longitude}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-[#2563eb] dark:text-blue-400 hover:text-[#1e40af] dark:hover:text-blue-300 hover:underline transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MapPin className="size-3" />
-                                GPS
-                              </a>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
+                          {/* Penanda / Admin markers */}
+                          <TableCell>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {att.isManual && (
+                                <Badge className="bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 border-teal-200 dark:border-teal-800 text-[9px] px-1.5 py-0">
+                                  <PenLine className="size-2.5 mr-0.5" />
+                                  Manual
+                                </Badge>
+                              )}
+                              {att.editedBy && (
+                                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800 text-[9px] px-1.5 py-0">
+                                  <Pencil className="size-2.5 mr-0.5" />
+                                  Diedit
+                                </Badge>
+                              )}
+                              {att.isDeleted && (
+                                <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800 text-[9px] px-1.5 py-0">
+                                  <Trash2 className="size-2.5 mr-0.5" />
+                                  Dihapus
+                                </Badge>
+                              )}
+                              {att.buktiDukung && (
+                                <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[9px] px-1.5 py-0">
+                                  <FileCheck className="size-2.5 mr-0.5" />
+                                  Bukti
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
 
                           {/* Foto thumbnail */}
@@ -813,24 +1361,6 @@ export function AttendanceMonitoring() {
                             )}
                           </TableCell>
 
-                          {/* Confidence */}
-                          <TableCell className="hidden lg:table-cell">
-                            <div className="flex items-center gap-2">
-                              <div className="w-14 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all"
-                                  style={{
-                                    width: `${Math.round(att.confidence * 100)}%`,
-                                    backgroundColor: confidenceColor(att.confidence),
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs text-muted-foreground tabular-nums">
-                                {Math.round(att.confidence * 100)}%
-                              </span>
-                            </div>
-                          </TableCell>
-
                           {/* Jarak */}
                           <TableCell className="hidden xl:table-cell">
                             {distance !== null ? (
@@ -839,6 +1369,44 @@ export function AttendanceMonitoring() {
                               </span>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* Aksi */}
+                          <TableCell className="text-center">
+                            {!att.isDeleted ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditAttendance(att)
+                                    setEditDialogOpen(true)
+                                  }}
+                                  className="size-7 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                  title="Edit absensi"
+                                >
+                                  <Pencil className="size-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setDeleteAttendance(att)
+                                    setDeleteDialogOpen(true)
+                                  }}
+                                  className="size-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  title="Hapus absensi"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[9px] px-2 py-0">
+                                Dihapus
+                              </Badge>
                             )}
                           </TableCell>
                         </motion.tr>
@@ -873,6 +1441,16 @@ export function AttendanceMonitoring() {
                 attendance={att}
                 onClick={() => setSelectedAttendance(att)}
                 officeSetting={officeSetting}
+                onEdit={(e) => {
+                  e.stopPropagation()
+                  setEditAttendance(att)
+                  setEditDialogOpen(true)
+                }}
+                onDelete={(e) => {
+                  e.stopPropagation()
+                  setDeleteAttendance(att)
+                  setDeleteDialogOpen(true)
+                }}
               />
             ))}
           </AnimatePresence>
@@ -906,6 +1484,69 @@ export function AttendanceMonitoring() {
         open={!!selectedAttendance}
         onOpenChange={(open) => !open && setSelectedAttendance(null)}
         officeSetting={officeSetting}
+      />
+
+      {/* ================================================================= */}
+      {/* Edit Dialog                                                       */}
+      {/* ================================================================= */}
+      <EditAttendanceDialog
+        attendance={editAttendance}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={fetchAttendances}
+      />
+
+      {/* ================================================================= */}
+      {/* Delete Confirmation Dialog                                        */}
+      {/* ================================================================= */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
+              <Trash2 className="size-5" />
+              Hapus Absensi
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              {deleteAttendance && (
+                <>
+                  Anda akan menghapus absensi <strong>{deleteAttendance.user?.nama ?? ''}</strong> pada{' '}
+                  <strong>{formatShortDate(deleteAttendance.createdAt)}</strong> ({deleteAttendance.type === 'MASUK' ? 'Masuk' : 'Pulang'} — {deleteAttendance.status}).
+                  <br />
+                  <br />
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                    Data akan ditandai sebagai &quot;dihapus&quot; dan tercatat atas nama admin yang menghapus.
+                  </span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-blue-200 dark:border-blue-800">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? 'Menghapus...' : (
+                <>
+                  <Trash2 className="size-4 mr-1.5" />
+                  Ya, Hapus
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ================================================================= */}
+      {/* Manual Attendance Dialog                                          */}
+      {/* ================================================================= */}
+      <ManualAttendanceDialog
+        open={manualDialogOpen}
+        onOpenChange={setManualDialogOpen}
+        onSuccess={fetchAttendances}
       />
     </motion.div>
   )

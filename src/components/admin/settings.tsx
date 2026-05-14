@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -13,24 +13,26 @@ import {
   Trash2,
   RefreshCw,
   AlertCircle,
-  Building2,
-  Radius,
-  Timer,
-  DayIcon,
+  Image as ImageIcon,
+  Upload,
+  ImagePlus,
+  X,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
 import type { OfficeSetting, Holiday, HolidayType } from '@/types'
+import { OfficeManagement } from '@/components/admin/office-management'
+import { ShiftManagement } from '@/components/admin/shift-management'
+import { updateAppMeta, forceRefreshIcons } from '@/lib/favicon'
+
+// Re-import setAppIdentity from store
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { Slider } from '@/components/ui/slider'
-import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tabs,
@@ -81,56 +83,28 @@ const itemVariants = {
 // Types
 // ---------------------------------------------------------------------------
 
-interface OfficeFormData {
-  officeName: string
-  latitude: number
-  longitude: number
-  radiusMeter: number
-}
-
-interface WorkHoursFormData {
-  startTime: string
-  endTime: string
-  lateTolerance: number
-  workDays: string
-}
-
 interface HolidayFormData {
   name: string
   date: string
   type: HolidayType
 }
 
-const DAY_LABELS: Record<string, string> = {
-  '1': 'Senin',
-  '2': 'Selasa',
-  '3': 'Rabu',
-  '4': 'Kamis',
-  '5': 'Jumat',
-  '6': 'Sabtu',
-  '0': 'Minggu',
-}
-
-const ALL_DAYS = ['1', '2', '3', '4', '5', '6', '0']
-
-const emptyOfficeForm: OfficeFormData = {
-  officeName: 'Kantor Pusat',
-  latitude: -6.2088,
-  longitude: 106.8456,
-  radiusMeter: 100,
-}
-
-const emptyWorkHoursForm: WorkHoursFormData = {
-  startTime: '08:00',
-  endTime: '17:00',
-  lateTolerance: 15,
-  workDays: '1,2,3,4,5',
+interface IdentityFormData {
+  appName: string
+  logoPath: string | null
+  faviconPath: string | null
 }
 
 const emptyHolidayForm: HolidayFormData = {
   name: '',
   date: '',
   type: 'NASIONAL',
+}
+
+const emptyIdentityForm: IdentityFormData = {
+  appName: 'Sistem Absensi Pegawai',
+  logoPath: null,
+  faviconPath: null,
 }
 
 // ---------------------------------------------------------------------------
@@ -163,120 +137,6 @@ function SettingsSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
-// Map Preview SVG
-// ---------------------------------------------------------------------------
-
-function MapPreview({ latitude, longitude, radius }: { latitude: number; longitude: number; radius: number }) {
-  const mapCenter = { x: 200, y: 150 }
-  // Scale radius for visualization (1m = 0.5px for small, capped at 120px)
-  const visualRadius = Math.min(Math.max(radius * 0.5, 20), 120)
-
-  return (
-    <div className="rounded-xl overflow-hidden border border-blue-100/50 dark:border-blue-900/30 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/20">
-      <svg
-        viewBox="0 0 400 300"
-        className="w-full h-auto"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Grid pattern */}
-        <defs>
-          <pattern id="settings-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e40af" strokeWidth="0.3" opacity="0.15" />
-          </pattern>
-        </defs>
-        <rect width="400" height="300" fill="url(#settings-grid)" />
-
-        {/* Radius circle */}
-        <circle
-          cx={mapCenter.x}
-          cy={mapCenter.y}
-          r={visualRadius}
-          fill="#2563eb"
-          fillOpacity="0.08"
-          stroke="#2563eb"
-          strokeWidth="1.5"
-          strokeDasharray="6 3"
-          opacity="0.6"
-        />
-
-        {/* Center point */}
-        <circle
-          cx={mapCenter.x}
-          cy={mapCenter.y}
-          r="6"
-          fill="#1e40af"
-          opacity="0.9"
-        />
-        <circle
-          cx={mapCenter.x}
-          cy={mapCenter.y}
-          r="3"
-          fill="white"
-        />
-
-        {/* Pulse animation */}
-        <circle
-          cx={mapCenter.x}
-          cy={mapCenter.y}
-          r="6"
-          fill="none"
-          stroke="#1e40af"
-          strokeWidth="1"
-          opacity="0.4"
-        >
-          <animate
-            attributeName="r"
-            from="6"
-            to="20"
-            dur="2s"
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="opacity"
-            from="0.4"
-            to="0"
-            dur="2s"
-            repeatCount="indefinite"
-          />
-        </circle>
-
-        {/* Labels */}
-        <text x={mapCenter.x + 12} y={mapCenter.y - 4} fontSize="9" fill="#1e40af" fontWeight="600" opacity="0.7">
-          Kantor
-        </text>
-        <text x={mapCenter.x + 12} y={mapCenter.y + 8} fontSize="7" fill="#1e40af" opacity="0.5">
-          {latitude.toFixed(4)}, {longitude.toFixed(4)}
-        </text>
-
-        {/* Radius label */}
-        <text
-          x={mapCenter.x + visualRadius / 2}
-          y={mapCenter.y - visualRadius - 6}
-          fontSize="8"
-          fill="#2563eb"
-          fontWeight="500"
-          textAnchor="middle"
-          opacity="0.7"
-        >
-          {radius}m
-        </text>
-
-        {/* Decorative dots */}
-        {[
-          { x: 80, y: 90 },
-          { x: 320, y: 80 },
-          { x: 60, y: 220 },
-          { x: 340, y: 230 },
-          { x: 150, y: 60 },
-        ].map((dot, i) => (
-          <circle key={i} cx={dot.x} cy={dot.y} r="2.5" fill="#1e40af" opacity="0.2" />
-        ))}
-      </svg>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -286,13 +146,6 @@ export function AdminSettings() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Office form
-  const [officeForm, setOfficeForm] = useState<OfficeFormData>(emptyOfficeForm)
-  const [isSavingOffice, setIsSavingOffice] = useState(false)
-
-  // Work hours form
-  const [workHoursForm, setWorkHoursForm] = useState<WorkHoursFormData>(emptyWorkHoursForm)
-  const [isSavingWorkHours, setIsSavingWorkHours] = useState(false)
 
   // Holidays
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -300,6 +153,16 @@ export function AdminSettings() {
   const [isAddingHoliday, setIsAddingHoliday] = useState(false)
   const [deleteHolidayTarget, setDeleteHolidayTarget] = useState<Holiday | null>(null)
   const [isDeletingHoliday, setIsDeletingHoliday] = useState(false)
+
+  // Identity form
+  const [identityForm, setIdentityForm] = useState<IdentityFormData>(emptyIdentityForm)
+  const [isSavingIdentity, setIsSavingIdentity] = useState(false)
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
+  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [faviconFile, setFaviconFile] = useState<File | null>(null)
 
   // ---- Fetch settings ----
   const fetchSettings = useCallback(async () => {
@@ -317,18 +180,11 @@ export function AdminSettings() {
       const setting: OfficeSetting = data.setting
       setSettings(setting)
 
-      // Populate forms
-      setOfficeForm({
-        officeName: setting.officeName || 'Kantor Pusat',
-        latitude: setting.latitude,
-        longitude: setting.longitude,
-        radiusMeter: setting.radiusMeter,
-      })
-      setWorkHoursForm({
-        startTime: setting.startTime || '08:00',
-        endTime: setting.endTime || '17:00',
-        lateTolerance: setting.lateTolerance,
-        workDays: setting.workDays || '1,2,3,4,5',
+      // Populate identity form
+      setIdentityForm({
+        appName: (setting as any).appName || 'Sistem Absensi Pegawai',
+        logoPath: (setting as any).logoPath || null,
+        faviconPath: (setting as any).faviconPath || null,
       })
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan')
@@ -356,74 +212,6 @@ export function AdminSettings() {
     fetchSettings()
     fetchHolidays()
   }, [fetchSettings, fetchHolidays])
-
-  // ---- Save office settings ----
-  const handleSaveOffice = async () => {
-    if (!officeForm.officeName) {
-      toast.error('Nama kantor wajib diisi')
-      return
-    }
-    try {
-      setIsSavingOffice(true)
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          officeName: officeForm.officeName,
-          latitude: officeForm.latitude,
-          longitude: officeForm.longitude,
-          radiusMeter: officeForm.radiusMeter,
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Gagal menyimpan pengaturan')
-      }
-      const data = await res.json()
-      setSettings(data.setting)
-      toast.success('Pengaturan lokasi disimpan', {
-        description: 'Lokasi kantor berhasil diperbarui',
-      })
-    } catch (err: any) {
-      toast.error('Gagal menyimpan', {
-        description: err.message || 'Terjadi kesalahan',
-      })
-    } finally {
-      setIsSavingOffice(false)
-    }
-  }
-
-  // ---- Save work hours ----
-  const handleSaveWorkHours = async () => {
-    try {
-      setIsSavingWorkHours(true)
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startTime: workHoursForm.startTime,
-          endTime: workHoursForm.endTime,
-          lateTolerance: workHoursForm.lateTolerance,
-          workDays: workHoursForm.workDays,
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Gagal menyimpan pengaturan')
-      }
-      const data = await res.json()
-      setSettings(data.setting)
-      toast.success('Pengaturan jam kerja disimpan', {
-        description: 'Jam kerja berhasil diperbarui',
-      })
-    } catch (err: any) {
-      toast.error('Gagal menyimpan', {
-        description: err.message || 'Terjadi kesalahan',
-      })
-    } finally {
-      setIsSavingWorkHours(false)
-    }
-  }
 
   // ---- Add holiday ----
   const handleAddHoliday = async () => {
@@ -480,13 +268,227 @@ export function AdminSettings() {
     }
   }
 
-  // ---- Toggle work day ----
-  const toggleWorkDay = (day: string) => {
-    const currentDays = workHoursForm.workDays ? workHoursForm.workDays.split(',').filter(Boolean) : []
-    const newDays = currentDays.includes(day)
-      ? currentDays.filter((d) => d !== day)
-      : [...currentDays, day].sort((a, b) => Number(a) - Number(b))
-    setWorkHoursForm((f) => ({ ...f, workDays: newDays.join(',') }))
+  // ---- Save identity settings ----
+  const handleSaveIdentity = async () => {
+    if (!identityForm.appName) {
+      toast.error('Nama aplikasi wajib diisi')
+      return
+    }
+    try {
+      setIsSavingIdentity(true)
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName: identityForm.appName,
+          logoPath: identityForm.logoPath,
+          faviconPath: identityForm.faviconPath,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal menyimpan pengaturan')
+      }
+      const data = await res.json()
+      setSettings(data.setting)
+      // Update the global app identity store so all components update immediately
+      const { setAppIdentity } = useAppStore.getState()
+      setAppIdentity({
+        appName: identityForm.appName,
+        logoPath: identityForm.logoPath,
+        faviconPath: identityForm.faviconPath,
+      })
+      // Update browser favicon, meta tags, and force refresh all icons
+      updateAppMeta(identityForm.appName)
+      forceRefreshIcons()
+      toast.success('Identitas aplikasi disimpan', {
+        description: 'Nama dan logo aplikasi berhasil diperbarui',
+      })
+    } catch (err: any) {
+      toast.error('Gagal menyimpan', {
+        description: err.message || 'Terjadi kesalahan',
+      })
+    } finally {
+      setIsSavingIdentity(false)
+    }
+  }
+
+  // ---- Upload logo ----
+  const handleUploadLogo = async () => {
+    if (!logoFile) return
+    try {
+      setIsUploadingLogo(true)
+      const formData = new FormData()
+      formData.append('file', logoFile)
+      formData.append('type', 'logo')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal mengunggah logo')
+      }
+      const data = await res.json()
+      const newLogoPath = data.path || data.filePath || null
+      setIdentityForm((f) => ({ ...f, logoPath: newLogoPath }))
+      setLogoFile(null)
+      if (logoInputRef.current) logoInputRef.current.value = ''
+      // Save settings with the new logo path
+      const saveRes = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName: identityForm.appName,
+          logoPath: newLogoPath,
+          faviconPath: identityForm.faviconPath,
+        }),
+      })
+      if (saveRes.ok) {
+        const saveData = await saveRes.json()
+        setSettings(saveData.setting)
+        // Update the global app identity store so logo updates immediately
+        const { setAppIdentity } = useAppStore.getState()
+        setAppIdentity({
+          appName: identityForm.appName,
+          logoPath: newLogoPath,
+          faviconPath: identityForm.faviconPath,
+          pwaIcon192Path: data.pwaIcon192 || null,
+          pwaIcon512Path: data.pwaIcon512 || null,
+        })
+        // Update browser favicon, manifest, and meta tags immediately
+        updateAppMeta(identityForm.appName)
+        forceRefreshIcons()
+        toast.success('Logo berhasil diunggah', {
+          description: 'Logo aplikasi telah diperbarui',
+        })
+      }
+    } catch (err: any) {
+      toast.error('Gagal mengunggah logo', {
+        description: err.message || 'Terjadi kesalahan',
+      })
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
+
+  // ---- Upload favicon ----
+  const handleUploadFavicon = async () => {
+    if (!faviconFile) return
+    try {
+      setIsUploadingFavicon(true)
+      const formData = new FormData()
+      formData.append('file', faviconFile)
+      formData.append('type', 'favicon')
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal mengunggah favicon')
+      }
+      const data = await res.json()
+      const newFaviconPath = data.path || data.filePath || null
+      setIdentityForm((f) => ({ ...f, faviconPath: newFaviconPath }))
+      setFaviconFile(null)
+      if (faviconInputRef.current) faviconInputRef.current.value = ''
+      // Save settings with the new favicon path
+      const saveRes = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName: identityForm.appName,
+          logoPath: identityForm.logoPath,
+          faviconPath: newFaviconPath,
+        }),
+      })
+      if (saveRes.ok) {
+        const saveData = await saveRes.json()
+        setSettings(saveData.setting)
+        // Update the global app identity store so favicon updates immediately
+        const { setAppIdentity } = useAppStore.getState()
+        setAppIdentity({
+          appName: identityForm.appName,
+          logoPath: identityForm.logoPath,
+          faviconPath: newFaviconPath,
+          pwaIcon192Path: data.pwaIcon192 || null,
+          pwaIcon512Path: data.pwaIcon512 || null,
+        })
+        // Update browser favicon, manifest, and meta tags immediately
+        updateAppMeta(identityForm.appName)
+        forceRefreshIcons()
+        toast.success('Favicon berhasil diunggah', {
+          description: 'Favicon aplikasi telah diperbarui',
+        })
+      }
+    } catch (err: any) {
+      toast.error('Gagal mengunggah favicon', {
+        description: err.message || 'Terjadi kesalahan',
+      })
+    } finally {
+      setIsUploadingFavicon(false)
+    }
+  }
+
+  // ---- Remove logo ----
+  const handleRemoveLogo = async () => {
+    setIdentityForm((f) => ({ ...f, logoPath: null }))
+    setLogoFile(null)
+    if (logoInputRef.current) logoInputRef.current.value = ''
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName: identityForm.appName,
+          logoPath: null,
+          faviconPath: identityForm.faviconPath,
+        }),
+      })
+      // Update global store
+      const { setAppIdentity } = useAppStore.getState()
+      setAppIdentity({
+        appName: identityForm.appName,
+        logoPath: null,
+        faviconPath: identityForm.faviconPath,
+      })
+      // Update browser favicon, manifest, and meta tags
+      forceRefreshIcons()
+      toast.success('Logo dihapus')
+    } catch {
+      toast.error('Gagal menghapus logo')
+    }
+  }
+
+  // ---- Remove favicon ----
+  const handleRemoveFavicon = async () => {
+    setIdentityForm((f) => ({ ...f, faviconPath: null }))
+    setFaviconFile(null)
+    if (faviconInputRef.current) faviconInputRef.current.value = ''
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName: identityForm.appName,
+          logoPath: identityForm.logoPath,
+          faviconPath: null,
+        }),
+      })
+      // Update global store
+      const { setAppIdentity } = useAppStore.getState()
+      setAppIdentity({
+        appName: identityForm.appName,
+        logoPath: identityForm.logoPath,
+        faviconPath: null,
+      })
+      // Update browser favicon, manifest, and meta tags
+      forceRefreshIcons()
+      toast.success('Favicon dihapus')
+    } catch {
+      toast.error('Gagal menghapus favicon')
+    }
   }
 
   // ---- Loading state ----
@@ -508,8 +510,6 @@ export function AdminSettings() {
     )
   }
 
-  const activeWorkDays = workHoursForm.workDays.split(',').filter(Boolean)
-
   return (
     <motion.div
       className="space-y-6"
@@ -525,7 +525,7 @@ export function AdminSettings() {
           Pengaturan
         </h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Kelola lokasi kantor, jam kerja, dan hari libur
+          Kelola identitas, lokasi kantor, jam kerja, dan hari libur
         </p>
       </motion.div>
 
@@ -533,8 +533,15 @@ export function AdminSettings() {
       {/* Tabs                                                              */}
       {/* ================================================================= */}
       <motion.div variants={itemVariants}>
-        <Tabs defaultValue="location" className="space-y-6">
-          <TabsList className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border border-blue-100/50 dark:border-blue-900/30 p-1 h-auto">
+        <Tabs defaultValue="identity" className="space-y-6">
+          <TabsList className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border border-blue-100/50 dark:border-blue-900/30 p-1 h-auto flex-wrap">
+            <TabsTrigger
+              value="identity"
+              className="data-[state=active]:bg-[#1e40af] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/25 text-sm px-4 py-2"
+            >
+              <ImageIcon className="size-4 mr-1.5" />
+              Identitas Aplikasi
+            </TabsTrigger>
             <TabsTrigger
               value="location"
               className="data-[state=active]:bg-[#1e40af] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/25 text-sm px-4 py-2"
@@ -559,110 +566,46 @@ export function AdminSettings() {
           </TabsList>
 
           {/* =============================================================== */}
-          {/* Tab: Lokasi Kantor                                              */}
+          {/* Tab: Identitas Aplikasi                                         */}
           {/* =============================================================== */}
-          <TabsContent value="location">
+          <TabsContent value="identity">
             <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5">
               <CardHeader>
                 <CardTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
-                  <Building2 className="size-5" />
-                  Lokasi Kantor
+                  <ImageIcon className="size-5" />
+                  Identitas Aplikasi
                 </CardTitle>
                 <CardDescription>
-                  Atur lokasi kantor dan radius absensi GPS
+                  Atur nama aplikasi, logo, dan favicon
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Form */}
+                  {/* Left: App Name + Save */}
                   <div className="space-y-5">
-                    {/* Office Name */}
                     <div className="space-y-2">
-                      <Label htmlFor="officeName" className="text-sm font-medium">
-                        Nama Kantor
+                      <Label htmlFor="appName" className="text-sm font-medium">
+                        Nama Aplikasi
                       </Label>
                       <Input
-                        id="officeName"
-                        value={officeForm.officeName}
-                        onChange={(e) => setOfficeForm((f) => ({ ...f, officeName: e.target.value }))}
-                        placeholder="Nama kantor"
+                        id="appName"
+                        value={identityForm.appName}
+                        onChange={(e) => setIdentityForm((f) => ({ ...f, appName: e.target.value }))}
+                        placeholder="Nama Aplikasi"
                         className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
                       />
-                    </div>
-
-                    {/* Latitude */}
-                    <div className="space-y-2">
-                      <Label htmlFor="latitude" className="text-sm font-medium">
-                        Latitude
-                      </Label>
-                      <Input
-                        id="latitude"
-                        type="number"
-                        step="0.000001"
-                        value={officeForm.latitude}
-                        onChange={(e) => setOfficeForm((f) => ({ ...f, latitude: parseFloat(e.target.value) || 0 }))}
-                        className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30 tabular-nums"
-                      />
-                    </div>
-
-                    {/* Longitude */}
-                    <div className="space-y-2">
-                      <Label htmlFor="longitude" className="text-sm font-medium">
-                        Longitude
-                      </Label>
-                      <Input
-                        id="longitude"
-                        type="number"
-                        step="0.000001"
-                        value={officeForm.longitude}
-                        onChange={(e) => setOfficeForm((f) => ({ ...f, longitude: parseFloat(e.target.value) || 0 }))}
-                        className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30 tabular-nums"
-                      />
-                    </div>
-
-                    {/* Radius */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Radius (meter)</Label>
-                        <Badge variant="outline" className="text-xs px-2 py-0.5 bg-[#1e40af]/10 text-[#1e40af] dark:bg-blue-900/30 dark:text-blue-300 border-[#1e40af]/20">
-                          {officeForm.radiusMeter}m
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[officeForm.radiusMeter]}
-                        onValueChange={([val]) => setOfficeForm((f) => ({ ...f, radiusMeter: val }))}
-                        min={10}
-                        max={1000}
-                        step={10}
-                        className="[&_[role=slider]]:bg-[#1e40af] [&_[role=slider]]:border-[#1e40af]"
-                      />
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span>10m</span>
-                        <span>500m</span>
-                        <span>1000m</span>
-                      </div>
-                      <Input
-                        type="number"
-                        value={officeForm.radiusMeter}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value)
-                          if (!isNaN(val) && val >= 10 && val <= 1000) {
-                            setOfficeForm((f) => ({ ...f, radiusMeter: val }))
-                          }
-                        }}
-                        min={10}
-                        max={1000}
-                        className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30 tabular-nums"
-                      />
+                      <p className="text-xs text-muted-foreground">
+                        Nama ini akan ditampilkan di header dan judul halaman
+                      </p>
                     </div>
 
                     {/* Save */}
                     <Button
-                      onClick={handleSaveOffice}
-                      disabled={isSavingOffice}
+                      onClick={handleSaveIdentity}
+                      disabled={isSavingIdentity}
                       className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
                     >
-                      {isSavingOffice ? (
+                      {isSavingIdentity ? (
                         <span className="flex items-center gap-2">
                           <svg className="animate-spin size-4" viewBox="0 0 24 24" fill="none">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -673,28 +616,163 @@ export function AdminSettings() {
                       ) : (
                         <>
                           <Save className="size-4 mr-1.5" />
-                          Simpan Lokasi
+                          Simpan Identitas
                         </>
                       )}
                     </Button>
                   </div>
 
-                  {/* Map Preview */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Pratinjau Lokasi
-                    </p>
-                    <MapPreview
-                      latitude={officeForm.latitude}
-                      longitude={officeForm.longitude}
-                      radius={officeForm.radiusMeter}
-                    />
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <MapPin className="size-3 text-[#1e40af]" />
-                      <span>
-                        {officeForm.latitude.toFixed(6)}, {officeForm.longitude.toFixed(6)} &bull; Radius: {officeForm.radiusMeter}m
-                      </span>
-                    </div>
+                  {/* Right: Logo & Favicon upload cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Logo Upload Card */}
+                    <Card className="border-dashed border-2 border-blue-100/50 dark:border-blue-900/30 bg-white/40 dark:bg-gray-800/20">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Logo</Label>
+                          {identityForm.logoPath && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={handleRemoveLogo}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                        {/* Preview */}
+                        <div className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white dark:bg-gray-800 h-28 flex items-center justify-center overflow-hidden">
+                          {identityForm.logoPath ? (
+                            <img
+                              src={identityForm.logoPath}
+                              alt="Logo Preview"
+                              className="max-h-24 max-w-full object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-muted-foreground/40">
+                              <ImageIcon className="size-8" />
+                              <span className="text-[10px]">Belum ada logo</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* File picker */}
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) setLogoFile(file)
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full border-blue-100/50 dark:border-blue-900/30 text-xs"
+                          onClick={() => logoInputRef.current?.click()}
+                        >
+                          <ImagePlus className="size-3.5 mr-1.5" />
+                          {logoFile ? logoFile.name.slice(0, 20) : 'Pilih File'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs"
+                          disabled={!logoFile || isUploadingLogo}
+                          onClick={handleUploadLogo}
+                        >
+                          {isUploadingLogo ? (
+                            <span className="flex items-center gap-1.5">
+                              <svg className="animate-spin size-3.5" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Mengunggah...
+                            </span>
+                          ) : (
+                            <>
+                              <Upload className="size-3.5 mr-1.5" />
+                              Unggah Logo
+                            </>
+                          )}
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Favicon Upload Card */}
+                    <Card className="border-dashed border-2 border-blue-100/50 dark:border-blue-900/30 bg-white/40 dark:bg-gray-800/20">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Favicon</Label>
+                          {identityForm.faviconPath && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={handleRemoveFavicon}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                        {/* Preview */}
+                        <div className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white dark:bg-gray-800 h-28 flex items-center justify-center overflow-hidden">
+                          {identityForm.faviconPath ? (
+                            <img
+                              src={identityForm.faviconPath}
+                              alt="Favicon Preview"
+                              className="max-h-16 max-w-16 object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-muted-foreground/40">
+                              <ImageIcon className="size-8" />
+                              <span className="text-[10px]">Belum ada favicon</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* File picker */}
+                        <input
+                          ref={faviconInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) setFaviconFile(file)
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full border-blue-100/50 dark:border-blue-900/30 text-xs"
+                          onClick={() => faviconInputRef.current?.click()}
+                        >
+                          <ImagePlus className="size-3.5 mr-1.5" />
+                          {faviconFile ? faviconFile.name.slice(0, 20) : 'Pilih File'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs"
+                          disabled={!faviconFile || isUploadingFavicon}
+                          onClick={handleUploadFavicon}
+                        >
+                          {isUploadingFavicon ? (
+                            <span className="flex items-center gap-1.5">
+                              <svg className="animate-spin size-3.5" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Mengunggah...
+                            </span>
+                          ) : (
+                            <>
+                              <Upload className="size-3.5 mr-1.5" />
+                              Unggah Favicon
+                            </>
+                          )}
+                        </Button>
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
               </CardContent>
@@ -702,168 +780,17 @@ export function AdminSettings() {
           </TabsContent>
 
           {/* =============================================================== */}
-          {/* Tab: Jam Kerja                                                  */}
+          {/* Tab: Lokasi Kantor (Full CRUD)                                  */}
+          {/* =============================================================== */}
+          <TabsContent value="location">
+            <OfficeManagement />
+          </TabsContent>
+
+          {/* =============================================================== */}
+          {/* Tab: Jam Kerja (Full CRUD)                                      */}
           {/* =============================================================== */}
           <TabsContent value="workhours">
-            <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5">
-              <CardHeader>
-                <CardTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
-                  <Timer className="size-5" />
-                  Jam Kerja
-                </CardTitle>
-                <CardDescription>
-                  Atur jam masuk, jam pulang, toleransi keterlambatan, dan hari kerja
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {/* Jam Masuk */}
-                  <div className="space-y-2">
-                    <Label htmlFor="startTime" className="text-sm font-medium flex items-center gap-1.5">
-                      <Clock className="size-3.5 text-emerald-500" />
-                      Jam Masuk
-                    </Label>
-                    <Input
-                      id="startTime"
-                      type="time"
-                      value={workHoursForm.startTime}
-                      onChange={(e) => setWorkHoursForm((f) => ({ ...f, startTime: e.target.value }))}
-                      className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
-                    />
-                  </div>
-
-                  {/* Jam Pulang */}
-                  <div className="space-y-2">
-                    <Label htmlFor="endTime" className="text-sm font-medium flex items-center gap-1.5">
-                      <Clock className="size-3.5 text-orange-500" />
-                      Jam Pulang
-                    </Label>
-                    <Input
-                      id="endTime"
-                      type="time"
-                      value={workHoursForm.endTime}
-                      onChange={(e) => setWorkHoursForm((f) => ({ ...f, endTime: e.target.value }))}
-                      className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30"
-                    />
-                  </div>
-                </div>
-
-                {/* Toleransi Keterlambatan */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Toleransi Keterlambatan</Label>
-                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
-                      {workHoursForm.lateTolerance} menit
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[workHoursForm.lateTolerance]}
-                    onValueChange={([val]) => setWorkHoursForm((f) => ({ ...f, lateTolerance: val }))}
-                    min={0}
-                    max={60}
-                    step={5}
-                    className="[&_[role=slider]]:bg-amber-500 [&_[role=slider]]:border-amber-500"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>0 menit</span>
-                    <span>30 menit</span>
-                    <span>60 menit</span>
-                  </div>
-                  <Input
-                    type="number"
-                    value={workHoursForm.lateTolerance}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value)
-                      if (!isNaN(val) && val >= 0 && val <= 60) {
-                        setWorkHoursForm((f) => ({ ...f, lateTolerance: val }))
-                      }
-                    }}
-                    min={0}
-                    max={60}
-                    className="bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30 tabular-nums w-32"
-                  />
-                </div>
-
-                {/* Hari Kerja */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Hari Kerja</Label>
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                    {ALL_DAYS.map((day) => {
-                      const isActive = activeWorkDays.includes(day)
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => toggleWorkDay(day)}
-                          className={`
-                            relative flex flex-col items-center justify-center rounded-xl border p-3 text-sm font-medium transition-all
-                            ${
-                              isActive
-                                ? 'bg-[#1e40af] text-white border-[#1e40af] shadow-md shadow-blue-500/20'
-                                : 'bg-white dark:bg-gray-800 text-muted-foreground border-blue-100/50 dark:border-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#1e40af] dark:hover:text-blue-300'
-                            }
-                          `}
-                        >
-                          <span className="text-xs font-semibold">{DAY_LABELS[day]}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {activeWorkDays.length > 0
-                      ? `Hari kerja: ${activeWorkDays.map((d) => DAY_LABELS[d]).join(', ')}`
-                      : 'Pilih minimal satu hari kerja'}
-                  </p>
-                </div>
-
-                <Separator className="bg-blue-50 dark:bg-blue-900/20" />
-
-                {/* Summary */}
-                <div className="rounded-xl border border-blue-100/50 dark:border-blue-900/30 p-4 bg-blue-50/30 dark:bg-blue-900/10 space-y-2">
-                  <p className="text-sm font-semibold text-[#1e40af] dark:text-blue-300">Ringkasan Jam Kerja</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-muted-foreground">Jam Masuk:</span>{' '}
-                      <span className="font-medium text-foreground">{workHoursForm.startTime}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Jam Pulang:</span>{' '}
-                      <span className="font-medium text-foreground">{workHoursForm.endTime}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Toleransi:</span>{' '}
-                      <span className="font-medium text-foreground">{workHoursForm.lateTolerance} menit</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Hari Kerja:</span>{' '}
-                      <span className="font-medium text-foreground">{activeWorkDays.length} hari</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Save */}
-                <Button
-                  onClick={handleSaveWorkHours}
-                  disabled={isSavingWorkHours}
-                  className="w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
-                >
-                  {isSavingWorkHours ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin size-4" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Menyimpan...
-                    </span>
-                  ) : (
-                    <>
-                      <Save className="size-4 mr-1.5" />
-                      Simpan Jam Kerja
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+            <ShiftManagement />
           </TabsContent>
 
           {/* =============================================================== */}

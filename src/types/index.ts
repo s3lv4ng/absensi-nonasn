@@ -12,6 +12,7 @@ export type HolidayType = 'NASIONAL' | 'KEAGAMAAN' | 'KHUSUS'
 
 export type AppView =
   | 'landing'
+  | 'setup'
   | 'login'
   | 'register'
   | 'employee-dashboard'
@@ -23,13 +24,28 @@ export type AppView =
   | 'admin-employees'
   | 'admin-attendance'
   | 'admin-settings'
-  | 'admin-reports'
   | 'admin-leaves'
-  | 'admin-offices'
-  | 'admin-shifts'
-  | 'admin-employee-report'
-  | 'admin-leave-types'
   | 'admin-rekap-absen'
+
+export interface UnitKerja {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  _count?: { users: number }
+}
+
+export interface Jabatan {
+  id: string
+  name: string
+  description: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  _count?: { users: number }
+}
 
 export interface User {
   id: string
@@ -42,11 +58,17 @@ export interface User {
   faceRegisteredAt: string | null
   unitKerja: string | null
   jabatan: string | null
+  unitKerjaId: string | null
+  jabatanId: string | null
   shiftId: string | null
+  mulaiBekerja: string | null
+  tanggalSelesai: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
   shift?: WorkShift
+  unitKerjaRef?: UnitKerja
+  jabatanRef?: Jabatan
 }
 
 export interface Attendance {
@@ -60,11 +82,23 @@ export interface Attendance {
   status: AttendanceStatus
   note: string | null
   shiftId: string | null
+  isManual: boolean
+  manualBy: string | null
+  buktiDukung: string | null
+  editedBy: string | null
+  editedAt: string | null
+  editReason: string | null
+  isDeleted: boolean
+  deletedBy: string | null
+  deletedAt: string | null
   createdAt: string
   user?: User
   shift?: WorkShift
   lateMinutes?: number | null
   earlyMinutes?: number | null
+  editedByUser?: User
+  deletedByUser?: User
+  manualByUser?: User
 }
 
 export interface Office {
@@ -104,6 +138,11 @@ export interface OfficeSetting {
   endTime: string
   lateTolerance: number
   workDays: string
+  appName: string
+  logoPath: string | null
+  faviconPath: string | null
+  pwaIcon192Path: string | null
+  pwaIcon512Path: string | null
   createdAt: string
   updatedAt: string
 }

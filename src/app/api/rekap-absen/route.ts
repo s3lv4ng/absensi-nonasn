@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { calculateAttendanceTiming } from '@/lib/attendance-utils'
+import { formatJakartaTime, getJakartaDay, getJakartaDayOfWeek, getJakartaTime, getShiftDate, createJakartaDate } from '@/lib/timezone'
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,12 +14,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1))
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()))
+    const unitKerjaId = searchParams.get('unitKerjaId') || ''
+    const jabatanId = searchParams.get('jabatanId') || ''
+    const shiftId = searchParams.get('shiftId') || ''
 
-    // Month boundaries
-    const monthStart = new Date(year, month - 1, 1)
-    monthStart.setHours(0, 0, 0, 0)
-    const monthEnd = new Date(year, month, 1)
-    monthEnd.setHours(0, 0, 0, 0)
+    // Month boundaries (in Jakarta timezone)
+    // We need to query a wider range from the database because UTC dates may shift
+    // by up to 7 hours from Jakarta dates. We'll filter to exact Jakarta dates afterwards.
+    const monthStartUtc = createJakartaDate(year, month - 1, 1, 0, 0)
+    const monthEndUtc = createJakartaDate(year, month, 1, 0, 0)
 
     // Days in month
     const daysInMonth = new Date(year, month, 0).getDate()
@@ -25,16 +30,26 @@ export async function GET(request: NextRequest) {
     // Get office settings
     const officeSettings = await db.officeSetting.findFirst()
 
-    // Get all active employees sorted by name
+    // Build employee filter
+    const employeeFilter: Record<string, unknown> = { isActive: true, role: 'PEGAWAI' }
+    if (unitKerjaId) employeeFilter.unitKerjaId = unitKerjaId
+    if (jabatanId) employeeFilter.jabatanId = jabatanId
+    if (shiftId) employeeFilter.shiftId = shiftId
+
+    // Get all active employees sorted by name (with optional filters)
     const allEmployees = await db.user.findMany({
-      where: { isActive: true, role: 'PEGAWAI' },
+      where: employeeFilter,
       select: {
         id: true,
         nip: true,
         nama: true,
         jabatan: true,
         unitKerja: true,
+        unitKerjaId: true,
+        jabatanId: true,
         shiftId: true,
+        mulaiBekerja: true,
+        tanggalSelesai: true,
         shift: {
           select: {
             id: true,
@@ -49,11 +64,34 @@ export async function GET(request: NextRequest) {
       orderBy: { nama: 'asc' },
     })
 
-    // Get all MASUK attendances for the month
+    // Build a map of userId -> shift info
+    const userShiftMap = new Map<string, { startTime: string; endTime: string; lateTolerance: number }>()
+    for (const emp of allEmployees) {
+      if (emp.shift) {
+        userShiftMap.set(emp.id, {
+          startTime: emp.shift.startTime,
+          endTime: emp.shift.endTime,
+          lateTolerance: emp.shift.lateTolerance,
+        })
+      }
+    }
+
+    // Default shift from office settings
+    const defaultShift = {
+      startTime: officeSettings?.startTime || '08:00',
+      endTime: officeSettings?.endTime || '17:00',
+      lateTolerance: officeSettings?.lateTolerance || 15,
+    }
+
+    // Build set of filtered employee IDs for attendance queries
+    const filteredUserIds = new Set(allEmployees.map((e) => e.id))
+
+    // Get all MASUK attendances for the month (query with buffer for timezone)
     const masukAttendances = await db.attendance.findMany({
       where: {
         type: 'MASUK',
-        createdAt: { gte: monthStart, lt: monthEnd },
+        createdAt: { gte: monthStartUtc, lt: monthEndUtc },
+        ...(filteredUserIds.size > 0 ? { userId: { in: Array.from(filteredUserIds) } } : {}),
       },
       select: {
         id: true,
@@ -61,6 +99,7 @@ export async function GET(request: NextRequest) {
         status: true,
         createdAt: true,
         shiftId: true,
+        isManual: true,
       },
     })
 
@@ -68,7 +107,8 @@ export async function GET(request: NextRequest) {
     const pulangAttendances = await db.attendance.findMany({
       where: {
         type: 'PULANG',
-        createdAt: { gte: monthStart, lt: monthEnd },
+        createdAt: { gte: monthStartUtc, lt: monthEndUtc },
+        ...(filteredUserIds.size > 0 ? { userId: { in: Array.from(filteredUserIds) } } : {}),
       },
       select: {
         id: true,
@@ -76,6 +116,7 @@ export async function GET(request: NextRequest) {
         status: true,
         createdAt: true,
         shiftId: true,
+        isManual: true,
       },
     })
 
@@ -83,8 +124,9 @@ export async function GET(request: NextRequest) {
     const leaveRequests = await db.leaveRequest.findMany({
       where: {
         status: 'APPROVED',
-        startDate: { lt: monthEnd },
-        endDate: { gte: monthStart },
+        startDate: { lt: monthEndUtc },
+        endDate: { gte: monthStartUtc },
+        ...(filteredUserIds.size > 0 ? { userId: { in: Array.from(filteredUserIds) } } : {}),
       },
       select: {
         id: true,
@@ -98,7 +140,7 @@ export async function GET(request: NextRequest) {
     // Get holidays for the month
     const holidays = await db.holiday.findMany({
       where: {
-        date: { gte: monthStart, lt: monthEnd },
+        date: { gte: monthStartUtc, lt: monthEndUtc },
       },
       select: {
         id: true,
@@ -107,11 +149,11 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Build holiday set (date string -> holiday name)
+    // Build holiday set (Jakarta date key -> holiday name)
     const holidayMap = new Map<string, string>()
     for (const h of holidays) {
-      const d = new Date(h.date)
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      const jakartaTime = getJakartaTime(new Date(h.date))
+      const key = `${jakartaTime.year}-${jakartaTime.month}-${jakartaTime.day}`
       holidayMap.set(key, h.name)
     }
 
@@ -119,58 +161,109 @@ export async function GET(request: NextRequest) {
     const workDaysStr = officeSettings?.workDays || '1,2,3,4,5'
     const workDayNums = workDaysStr.split(',').map(Number)
 
-    // Helper: get date key
-    const getDateKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+    // Helper: get Jakarta date key
+    const getDateKey = (year: number, month: number, day: number) => `${year}-${month}-${day}`
 
-    // Build attendance maps per user per day
+    // Build attendance maps per user per day (using Jakarta shift date)
     type AttendanceInfo = {
       masukTime: string | null
       pulangTime: string | null
       masukStatus: string | null
       pulangStatus: string | null
+      isManualMasuk: boolean
+      isManualPulang: boolean
     }
 
     const attendanceMap = new Map<string, AttendanceInfo>()
 
-    const formatTime = (date: Date): string => {
-      const h = date.getHours().toString().padStart(2, '0')
-      const m = date.getMinutes().toString().padStart(2, '0')
-      return `${h}:${m}`
-    }
-
-    // Process MASUK attendances
+    // Process MASUK attendances - group by effective shift date
     for (const att of masukAttendances) {
       const attDate = new Date(att.createdAt)
-      const key = `${att.userId}_${attDate.getDate()}`
-      const existing = attendanceMap.get(key) || { masukTime: null, pulangTime: null, masukStatus: null, pulangStatus: null }
-      existing.masukTime = formatTime(attDate)
-      existing.masukStatus = att.status
+
+      // Get shift info for this user
+      const shiftInfo = userShiftMap.get(att.userId) || defaultShift
+
+      // Determine the effective shift date in Jakarta timezone
+      const shiftDate = getShiftDate(attDate, shiftInfo.startTime, shiftInfo.endTime)
+
+      // Filter: only include attendances that fall within the selected month in Jakarta time
+      if (shiftDate.year !== year || shiftDate.month !== month - 1) continue
+
+      const key = `${att.userId}_${shiftDate.day}`
+      const existing = attendanceMap.get(key) || { masukTime: null, pulangTime: null, masukStatus: null, pulangStatus: null, isManualMasuk: false, isManualPulang: false }
+      existing.masukTime = formatJakartaTime(attDate)
+      existing.isManualMasuk = att.isManual
+
+      // Recalculate TELAT status based on current shift assignment
+      // This ensures the rekap shows correct status even if the original
+      // attendance was saved with wrong status (e.g., user wasn't assigned to shift at that time)
+      const calcResult = calculateAttendanceTiming(
+        shiftInfo.startTime,
+        shiftInfo.endTime,
+        shiftInfo.lateTolerance,
+        attDate,
+        'MASUK'
+      )
+      existing.masukStatus = calcResult.isLate ? 'TELAT' : 'HADIR'
+
       attendanceMap.set(key, existing)
     }
 
-    // Process PULANG attendances
+    // Process PULANG attendances - group by effective shift date
     for (const att of pulangAttendances) {
       const attDate = new Date(att.createdAt)
-      const key = `${att.userId}_${attDate.getDate()}`
-      const existing = attendanceMap.get(key) || { masukTime: null, pulangTime: null, masukStatus: null, pulangStatus: null }
-      existing.pulangTime = formatTime(attDate)
-      existing.pulangStatus = att.status
+
+      // Get shift info for this user
+      const shiftInfo = userShiftMap.get(att.userId) || defaultShift
+
+      // Determine the effective shift date in Jakarta timezone
+      const shiftDate = getShiftDate(attDate, shiftInfo.startTime, shiftInfo.endTime)
+
+      // Filter: only include attendances that fall within the selected month in Jakarta time
+      if (shiftDate.year !== year || shiftDate.month !== month - 1) continue
+
+      const key = `${att.userId}_${shiftDate.day}`
+      const existing = attendanceMap.get(key) || { masukTime: null, pulangTime: null, masukStatus: null, pulangStatus: null, isManualMasuk: false, isManualPulang: false }
+      existing.pulangTime = formatJakartaTime(attDate)
+      existing.isManualPulang = att.isManual
+
+      // Recalculate PULANG_CEPAT status based on current shift assignment
+      const calcResult = calculateAttendanceTiming(
+        shiftInfo.startTime,
+        shiftInfo.endTime,
+        shiftInfo.lateTolerance,
+        attDate,
+        'PULANG'
+      )
+      existing.pulangStatus = calcResult.isEarly ? 'PULANG_CEPAT' : 'HADIR'
+
       attendanceMap.set(key, existing)
     }
 
-    // Build leave map per user per day
+    // Build leave map per user per day (in Jakarta timezone)
     const leaveMap = new Map<string, string>() // userId_day -> leave type code
     for (const leave of leaveRequests) {
-      const start = new Date(leave.startDate)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(leave.endDate)
-      end.setHours(23, 59, 59, 999)
+      const startJakarta = getJakartaTime(new Date(leave.startDate))
+      const endJakarta = getJakartaTime(new Date(leave.endDate))
 
-      // Iterate through all days of the leave
-      const current = new Date(start)
-      while (current <= end) {
-        if (current.getMonth() === month - 1 && current.getFullYear() === year) {
-          const day = current.getDate()
+      // Iterate through all days of the leave in Jakarta timezone
+      let currentYear = startJakarta.year
+      let currentMonth = startJakarta.month
+      let currentDay = startJakarta.day
+
+      while (true) {
+        const currentDate = createJakartaDate(currentYear, currentMonth, currentDay)
+        const currentJakarta = getJakartaTime(currentDate)
+
+        // Check if we've passed the end date
+        if (currentJakarta.year > endJakarta.year ||
+            (currentJakarta.year === endJakarta.year && currentJakarta.month > endJakarta.month) ||
+            (currentJakarta.year === endJakarta.year && currentJakarta.month === endJakarta.month && currentJakarta.day > endJakarta.day)) {
+          break
+        }
+
+        if (currentJakarta.month === month - 1 && currentJakarta.year === year) {
+          const day = currentJakarta.day
           const key = `${leave.userId}_${day}`
           // Map leave type to code
           let code = leave.type
@@ -181,11 +274,22 @@ export async function GET(request: NextRequest) {
           else if (leave.type === 'SAKIT') code = 'S'
           leaveMap.set(key, code)
         }
-        current.setDate(current.getDate() + 1)
+
+        // Move to next day
+        currentDay++
+        const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+        if (currentDay > daysInCurrentMonth) {
+          currentDay = 1
+          currentMonth++
+          if (currentMonth > 11) {
+            currentMonth = 0
+            currentYear++
+          }
+        }
       }
     }
 
-    // Build day info (which days are weekends, holidays, etc.)
+    // Build day info (which days are weekends, holidays, etc.) using Jakarta timezone
     const dayInfo: {
       day: number
       isWeekend: boolean
@@ -197,7 +301,7 @@ export async function GET(request: NextRequest) {
       const date = new Date(year, month - 1, d)
       const dayOfWeek = date.getDay()
       const isWeekend = !workDayNums.includes(dayOfWeek)
-      const holidayKey = getDateKey(date)
+      const holidayKey = getDateKey(year, month - 1, d)
       const holidayName = holidayMap.get(holidayKey) || null
       const isHoliday = !!holidayName
 
@@ -215,9 +319,11 @@ export async function GET(request: NextRequest) {
         day: number
         masuk: string | null
         pulang: string | null
-        status: string // 'HADIR' | 'TELAT' | 'DL' | 'DD' | 'I' | 'C' | 'S' | 'ALPHA' | '-' (weekend/holiday)
+        status: string // 'HADIR' | 'TELAT' | 'TIDAK_LENGKAP' | 'DL' | 'DD' | 'I' | 'C' | 'S' | 'ALPHA' | '-' (weekend/holiday)
         isWeekend: boolean
         isHoliday: boolean
+        isManualMasuk?: boolean
+        isManualPulang?: boolean
       }[] = []
 
       for (let d = 1; d <= daysInMonth; d++) {
@@ -226,7 +332,40 @@ export async function GET(request: NextRequest) {
         const att = attendanceMap.get(attKey)
         const leaveCode = leaveMap.get(attKey)
 
-        if (info.isWeekend || info.isHoliday) {
+        // Check if this date is before the employee's start date or after end date
+        const currentDate = new Date(year, month - 1, d)
+        const mulaiBekerja = emp.mulaiBekerja ? new Date(emp.mulaiBekerja) : null
+        const tanggalSelesai = emp.tanggalSelesai ? new Date(emp.tanggalSelesai) : null
+
+        // Normalize dates to compare only year-month-day (ignore time)
+        const currentDateOnly = new Date(year, month - 1, d)
+        const mulaiBekerjaOnly = mulaiBekerja ? new Date(mulaiBekerja.getFullYear(), mulaiBekerja.getMonth(), mulaiBekerja.getDate()) : null
+        const tanggalSelesaiOnly = tanggalSelesai ? new Date(tanggalSelesai.getFullYear(), tanggalSelesai.getMonth(), tanggalSelesai.getDate()) : null
+
+        if ((mulaiBekerjaOnly && currentDateOnly < mulaiBekerjaOnly) || (tanggalSelesaiOnly && currentDateOnly > tanggalSelesaiOnly)) {
+          // Date is outside the employee's working period - don't mark as anything
+          days.push({
+            day: d,
+            masuk: null,
+            pulang: null,
+            status: '-',
+            isWeekend: false,
+            isHoliday: false,
+          })
+          continue
+        }
+
+        // Check for leave code on this day (even weekends/holidays)
+        if (leaveCode) {
+          days.push({
+            day: d,
+            masuk: leaveCode,
+            pulang: leaveCode,
+            status: leaveCode,
+            isWeekend: info.isWeekend,
+            isHoliday: info.isHoliday,
+          })
+        } else if (info.isWeekend || info.isHoliday) {
           days.push({
             day: d,
             masuk: null,
@@ -235,8 +374,8 @@ export async function GET(request: NextRequest) {
             isWeekend: info.isWeekend,
             isHoliday: info.isHoliday,
           })
-        } else if (att?.masukTime) {
-          // Has attendance
+        } else if (att?.masukTime && att?.pulangTime) {
+          // Both masuk and pulang recorded -> full attendance
           const masukStatus = att.masukStatus || 'HADIR'
           days.push({
             day: d,
@@ -245,7 +384,60 @@ export async function GET(request: NextRequest) {
             status: masukStatus === 'TELAT' ? 'TELAT' : 'HADIR',
             isWeekend: false,
             isHoliday: false,
+            isManualMasuk: att.isManualMasuk,
+            isManualPulang: att.isManualPulang,
           })
+        } else if (att?.masukTime && !att?.pulangTime) {
+          // Only masuk, no pulang
+          if (att.isManualMasuk) {
+            // Manual override by admin -> count as hadir
+            const masukStatus = att.masukStatus || 'HADIR'
+            days.push({
+              day: d,
+              masuk: att.masukTime,
+              pulang: null,
+              status: masukStatus === 'TELAT' ? 'TELAT' : 'HADIR',
+              isWeekend: false,
+              isHoliday: false,
+              isManualMasuk: true,
+            })
+          } else {
+            // Incomplete -> not counted as hadir
+            days.push({
+              day: d,
+              masuk: att.masukTime,
+              pulang: null,
+              status: 'TIDAK_LENGKAP',
+              isWeekend: false,
+              isHoliday: false,
+              isManualMasuk: false,
+            })
+          }
+        } else if (!att?.masukTime && att?.pulangTime) {
+          // Only pulang, no masuk
+          if (att.isManualPulang) {
+            // Manual override by admin -> count as hadir
+            days.push({
+              day: d,
+              masuk: null,
+              pulang: att.pulangTime,
+              status: 'HADIR',
+              isWeekend: false,
+              isHoliday: false,
+              isManualPulang: true,
+            })
+          } else {
+            // Incomplete -> not counted as hadir
+            days.push({
+              day: d,
+              masuk: null,
+              pulang: att.pulangTime,
+              status: 'TIDAK_LENGKAP',
+              isWeekend: false,
+              isHoliday: false,
+              isManualPulang: false,
+            })
+          }
         } else if (leaveCode) {
           // Has approved leave
           days.push({

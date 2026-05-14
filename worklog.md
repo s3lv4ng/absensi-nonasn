@@ -1,26 +1,32 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Create Cetak Rekap Absen (Format 2) based on uploaded PDF format
+Task: Add features to Admin Monitoring Absensi: Date range filter, Name filter, Edit/Delete with bukti dukung upload, Admin penanda markers
 
 Work Log:
-- Extracted text and tables from uploaded PDF "Cetak Rekap Absen Juli bkad 2025.pdf" to understand the format
-- Format: Monthly grid table with employees in rows, days 1-31 in columns, each cell shows MASUK time / PULANG time or status codes (DL, DD, I, C, S, A, -)
-- Created API endpoint `/api/rekap-absen/route.ts` that returns grid data (employees × days with attendance times and status codes)
-- Created component `src/components/admin/rekap-absen.tsx` with:
-  - Month/Year selector
-  - Legend for status codes (DL, DD, I, C, S, A, Telat, -)
-  - Large grid table matching the PDF format with sticky name column
-  - Color-coded status cells
-  - Pagination (15 employees per page)
-  - Print and Export PDF buttons (opens print window with landscape layout)
-- Added `admin-rekap-absen` to AppView type in `src/types/index.ts`
-- Added `Cetak Rekap Absen` nav item with TableProperties icon to sidebar
-- Added `RekapAbsen` component import and case to `src/app/page.tsx`
-- Lint check passed with no errors
-- Dev server confirmed running and loading the new component
+- Updated Prisma schema: added `buktiDukung`, `editedBy`, `editedAt`, `editReason`, `isDeleted`, `deletedBy`, `deletedAt` fields to Attendance model
+- Ran `db:push` to apply schema changes successfully
+- Updated TypeScript types in `src/types/index.ts` with new Attendance fields + `editedByUser`, `deletedByUser`, `manualByUser` relations
+- Created `src/app/api/attendance/[id]/route.ts` with PATCH (edit with bukti dukung), DELETE (soft delete), and GET (single detail with admin names)
+- Updated `src/app/api/attendance/route.ts` GET handler: added `searchName` filter, `showDeleted` toggle, `isDeleted: false` default filter, admin name resolution
+- Completely rewrote `src/components/admin/attendance-monitoring.tsx` with:
+  - Date range filter (startDate to endDate, default current month 1-31)
+  - Employee name search filter
+  - Edit dialog with bukti dukung upload, edit reason (required), status/type/note editing
+  - Delete confirmation dialog (soft delete with admin tracking)
+  - Admin marker badges: "Manual by [name]", "Diedit by [name]", "Dihapus by [name]", "Bukti"
+  - Show/Hide deleted records toggle
+  - Updated table with "Penanda" column and "Aksi" column (edit/delete buttons)
+- Updated `src/components/admin/manual-attendance-dialog.tsx`: added bukti dukung upload with preview
+- Updated `src/app/api/attendance/manual/route.ts`: added buktiDukung support with image compression
+- All images (bukti dukung) are compressed before storing using compressBase64Image (640x480, quality 60)
+- Lint passes cleanly, dev server running
 
 Stage Summary:
-- New "Cetak Rekap Absen" (Format 2) feature fully implemented matching the uploaded PDF format
-- Accessible from Admin sidebar under "Laporan" section
-- API, component, navigation, and PDF export all working
+- Complete feature set implemented for Monitoring Absensi admin role
+- Date range filter: default current month (1-31), customizable
+- Name filter: search by employee name with clear button
+- Edit: change status/type/note with required edit reason + optional bukti dukung upload
+- Delete: soft delete with admin tracking, can be toggled visible/hidden
+- Admin markers: visible badges showing who edited/deleted/added attendance, with bukti dukung indicator
+- All images compressed for database efficiency

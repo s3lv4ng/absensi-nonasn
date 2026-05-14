@@ -40,9 +40,12 @@ import {
   Building2,
   ShieldX,
   ShieldCheck,
+  WifiOff,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Attendance, Office, WorkShift, AttendanceType } from '@/types'
+import { queueAttendance, isOnline } from '@/lib/pwa'
+import { AttendanceCalendar } from '@/components/employee/attendance-calendar'
 
 interface TodayAttendance {
   masuk: Attendance | null
@@ -278,6 +281,33 @@ export function EmployeeDashboard() {
 
     if (!faceVerified) {
       toast.error('Verifikasi wajah gagal. Wajah tidak cocok dengan data terdaftar.')
+      return
+    }
+
+    // Check if offline — queue the attendance for later sync
+    if (!isOnline()) {
+      queueAttendance({
+        type: attendanceType,
+        latitude: validatedLocation!.latitude,
+        longitude: validatedLocation!.longitude,
+        photo: capturedPhoto,
+        confidence: capturedConfidence,
+        officeId: selectedOfficeId,
+        faceVerified: true,
+      })
+
+      toast.success(
+        attendanceType === 'MASUK'
+          ? 'Absen masuk disimpan offline!'
+          : 'Absen pulang disimpan offline!',
+        {
+          description:
+            'Data absensi Anda telah antri dan akan dikirim otomatis saat kembali online.',
+          icon: <WifiOff className="size-4" />,
+        }
+      )
+
+      setDialogOpen(false)
       return
     }
 
@@ -685,6 +715,15 @@ export function EmployeeDashboard() {
             </CardContent>
           </Card>
         </div>
+      </motion.div>
+
+      {/* Calendar Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.5 }}
+      >
+        <AttendanceCalendar />
       </motion.div>
 
       {/* Attendance Dialog */}

@@ -213,15 +213,26 @@ export function useCamera() {
     const videoWidth = video.videoWidth || 640
     const videoHeight = video.videoHeight || 480
 
-    canvas.width = videoWidth
-    canvas.height = videoHeight
+    // Resize to smaller dimensions for network & storage efficiency
+    // Target max 480px on the longest side for face recognition (still good enough quality)
+    const MAX_DIM = 480
+    let targetWidth = videoWidth
+    let targetHeight = videoHeight
+    if (videoWidth > MAX_DIM || videoHeight > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / videoWidth, MAX_DIM / videoHeight)
+      targetWidth = Math.round(videoWidth * ratio)
+      targetHeight = Math.round(videoHeight * ratio)
+    }
+
+    canvas.width = targetWidth
+    canvas.height = targetHeight
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
 
     // Draw current frame (not mirrored - we'll mirror in display)
-    ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+    ctx.drawImage(video, 0, 0, targetWidth, targetHeight)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
     setCapturedPhoto(dataUrl)
     return dataUrl
   }, [])

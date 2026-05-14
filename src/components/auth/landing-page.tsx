@@ -81,7 +81,7 @@ const benefits = [
 ]
 
 export function LandingPage() {
-  const { setCurrentView } = useAppStore()
+  const { setCurrentView, appIdentity } = useAppStore()
   const { login } = useAuthStore()
 
   return (
@@ -95,11 +95,15 @@ export function LandingPage() {
       >
         <nav className="flex items-center justify-between max-w-6xl mx-auto">
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center size-9 rounded-xl bg-gradient-to-br from-[#1e40af] to-[#2563eb] text-white shadow-lg shadow-blue-500/25">
-              <Fingerprint className="size-5" />
+            <div className="flex items-center justify-center size-9 rounded-xl bg-gradient-to-br from-[#1e40af] to-[#2563eb] text-white shadow-lg shadow-blue-500/25 overflow-hidden">
+              {appIdentity.logoPath ? (
+                <img src={appIdentity.logoPath} alt="Logo" className="size-9 object-contain rounded-xl" />
+              ) : (
+                <Fingerprint className="size-5" />
+              )}
             </div>
             <div>
-              <span className="font-bold text-lg text-[#1e3a8a] dark:text-blue-300">Absensi</span>
+              <span className="font-bold text-lg text-[#1e3a8a] dark:text-blue-300">{appIdentity.appName.split(' ').slice(0, 2).join(' ')}</span>
               <span className="hidden sm:inline text-xs text-muted-foreground ml-1.5">v2.0</span>
             </div>
           </div>
@@ -482,13 +486,17 @@ export function LandingPage() {
       <footer className="p-4 sm:p-6 text-center border-t border-blue-100/50 dark:border-blue-900/30">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="size-6 rounded-lg bg-gradient-to-br from-[#1e40af] to-[#2563eb] flex items-center justify-center text-white">
-              <Fingerprint className="size-3.5" />
+            <div className="size-6 rounded-lg bg-gradient-to-br from-[#1e40af] to-[#2563eb] flex items-center justify-center text-white overflow-hidden">
+              {appIdentity.logoPath ? (
+                <img src={appIdentity.logoPath} alt="Logo" className="size-6 object-contain rounded-lg" />
+              ) : (
+                <Fingerprint className="size-3.5" />
+              )}
             </div>
-            <span className="text-sm font-medium text-[#1e3a8a] dark:text-blue-300">Absensi</span>
+            <span className="text-sm font-medium text-[#1e3a8a] dark:text-blue-300">{appIdentity.appName.split(' ').slice(0, 2).join(' ')}</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Sistem Absensi Pegawai. Hak Cipta Dilindungi.
+            &copy; {new Date().getFullYear()} {appIdentity.appName}. Hak Cipta Dilindungi.
           </p>
         </div>
       </footer>

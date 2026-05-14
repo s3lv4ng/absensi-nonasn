@@ -2,9 +2,12 @@
 
 import { useEffect } from 'react'
 import { useAuthStore, useAppStore } from '@/store'
+import { updateFavicon, updateAppMeta } from '@/lib/favicon'
+import { registerServiceWorker } from '@/lib/pwa'
 import { AppLayout } from '@/components/layout/app-layout'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
+import { SetupWizard } from '@/components/auth/setup-wizard'
 import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
 import { AttendanceHistory } from '@/components/employee/attendance-history'
 import { Profile } from '@/components/employee/profile'
@@ -14,18 +17,15 @@ import { AdminDashboard } from '@/components/admin/admin-dashboard'
 import { EmployeeManagement } from '@/components/admin/employee-management'
 import { AttendanceMonitoring } from '@/components/admin/attendance-monitoring'
 import { AdminSettings } from '@/components/admin/settings'
-import { AdminReports } from '@/components/admin/reports'
 import { LeaveManagement } from '@/components/admin/leave-management'
-import { OfficeManagement } from '@/components/admin/office-management'
-import { ShiftManagement } from '@/components/admin/shift-management'
-import { EmployeeReport } from '@/components/admin/employee-report'
-import { LeaveTypeManagement } from '@/components/admin/leave-type-management'
 import { RekapAbsen } from '@/components/admin/rekap-absen'
 
 function ViewRenderer() {
   const { currentView } = useAppStore()
 
   switch (currentView) {
+    case 'setup':
+      return <SetupWizard />
     case 'login':
       return <LoginForm />
     case 'register':
@@ -38,18 +38,8 @@ function ViewRenderer() {
       return <AttendanceMonitoring />
     case 'admin-settings':
       return <AdminSettings />
-    case 'admin-reports':
-      return <AdminReports />
     case 'admin-leaves':
       return <LeaveManagement />
-    case 'admin-offices':
-      return <OfficeManagement />
-    case 'admin-shifts':
-      return <ShiftManagement />
-    case 'admin-employee-report':
-      return <EmployeeReport />
-    case 'admin-leave-types':
-      return <LeaveTypeManagement />
     case 'admin-rekap-absen':
       return <RekapAbsen />
     case 'employee-dashboard':
@@ -91,17 +81,27 @@ function LoadingScreen() {
 
 export default function Home() {
   const { isAuthenticated, isLoading, initialized, initialize } = useAuthStore()
-  const { currentView } = useAppStore()
+  const { currentView, fetchAppIdentity, appIdentity } = useAppStore()
 
   useEffect(() => {
     initialize()
-  }, [initialize])
+    fetchAppIdentity()
+    registerServiceWorker()
+  }, [initialize, fetchAppIdentity])
+
+  // Update favicon and title for public pages (login, register)
+  useEffect(() => {
+    // updateFavicon now uses /api/favicon which serves the DB value
+    // Just need to trigger the update when identity changes
+    updateFavicon(appIdentity.faviconPath, appIdentity.logoPath)
+    updateAppMeta(appIdentity.appName || 'Sistem Absensi Pegawai')
+  }, [appIdentity.appName, appIdentity.faviconPath, appIdentity.logoPath])
 
   if (isLoading && !initialized) {
     return <LoadingScreen />
   }
 
-  const publicViews = ['login', 'register']
+  const publicViews = ['setup', 'login', 'register']
   const isPublicView = publicViews.includes(currentView)
 
   if (!isAuthenticated || isPublicView) {

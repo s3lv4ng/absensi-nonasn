@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
+import { calculateAttendanceTiming } from '@/lib/attendance-utils'
+import { getJakartaTime, createJakartaDate } from '@/lib/timezone'
+import { compressBase64Image } from '@/lib/image-compress'
 
 export async function POST(request: NextRequest) {
   try {
@@ -111,19 +114,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if already clocked in/out today
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    // Check if already clocked in/out today (using Jakarta timezone)
+    const nowJakarta = getJakartaTime(new Date())
+
+    // Determine shift boundaries for the "today" check
+    // For cross-midnight shifts (e.g., 22:00-06:00), "today" spans from shift start to shift end
+    const [startH, startM] = shiftStartTime.split(':').map(Number)
+    const startMinutes = startH * 60 + startM
+
+    // Determine the effective shift date in Jakarta timezone
+    let shiftDateYear = nowJakarta.year
+    let shiftDateMonth = nowJakarta.month
+    let shiftDateDay = nowJakarta.day
+
+    // Determine shift end time
+    let shiftEndTime: string | null = null
+    if (userWithShift?.shift && userWithShift.shift.isActive) {
+      shiftEndTime = userWithShift.shift.endTime
+    } else {
+      const officeSettingFallback = await db.officeSetting.findFirst()
+      shiftEndTime = officeSettingFallback?.endTime || null
+    }
+
+    const effectiveEndTime = shiftEndTime || '17:00'
+    const [endH, endM] = effectiveEndTime.split(':').map(Number)
+    const endMinutes = endH * 60 + endM
+    const isCrossMidnight = startMinutes >= endMinutes
+
+    if (isCrossMidnight) {
+      // For cross-midnight shifts, if the current time is in the early morning (after midnight but before shift end),
+      // the shift started on the previous Jakarta day
+      if (nowJakarta.totalMinutes < startMinutes) {
+        // Current time is before shift start (e.g., 02:00 for a 22:00 shift)
+        // Shift started the previous day
+        const prevDayDate = new Date(new Date().getTime() - 86400000)
+        const prevJakarta = getJakartaTime(prevDayDate)
+        shiftDateYear = prevJakarta.year
+        shiftDateMonth = prevJakarta.month
+        shiftDateDay = prevJakarta.day
+      }
+    }
+
+    // Create the time range for the "today" check based on the shift date
+    // Start: shift date 00:00 Jakarta time = shift date 00:00 - 7h UTC
+    // End: shift date + 1 day 00:00 Jakarta time
+    const todayStartUtc = createJakartaDate(shiftDateYear, shiftDateMonth, shiftDateDay, 0, 0)
+    const todayEndUtc = createJakartaDate(shiftDateYear, shiftDateMonth, shiftDateDay + 1, 0, 0)
 
     const existingToday = await db.attendance.findFirst({
       where: {
         userId: authUser.userId,
         type,
         createdAt: {
-          gte: today,
-          lt: tomorrow,
+          gte: todayStartUtc,
+          lt: todayEndUtc,
         },
       },
     })
@@ -135,46 +179,54 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine shift end time for PULANG_CEPAT detection
-    let shiftEndTime: string | null = null
-    if (userWithShift?.shift && userWithShift.shift.isActive) {
-      shiftEndTime = userWithShift.shift.endTime
-    } else {
-      const officeSettingFallback = await db.officeSetting.findFirst()
-      shiftEndTime = officeSettingFallback?.endTime || null
-    }
-
-    // Determine status based on user's assigned shift
+    // Determine status based on user's assigned shift using shared utility
     let attendanceStatus = status || 'HADIR'
     let lateMinutes: number | null = null
     let earlyMinutes: number | null = null
 
-    if (type === 'MASUK') {
-      const now = new Date()
-      const [hours, minutes] = shiftStartTime.split(':').map(Number)
-      const startTime = new Date(now)
-      startTime.setHours(hours, minutes + shiftLateTolerance, 0, 0)
+    const now = new Date()
 
-      if (now > startTime) {
+    if (type === 'MASUK') {
+      const result = calculateAttendanceTiming(
+        shiftStartTime,
+        effectiveEndTime,
+        shiftLateTolerance,
+        now,
+        'MASUK'
+      )
+      if (result.isLate) {
         attendanceStatus = 'TELAT'
-        // Calculate minutes late
-        const diffMs = now.getTime() - startTime.getTime()
-        lateMinutes = Math.ceil(diffMs / 60000)
+        lateMinutes = result.lateMinutes
       }
     } else if (type === 'PULANG') {
-      // Check for PULANG_CEPAT (leaving before shift endTime)
       if (shiftEndTime) {
-        const now = new Date()
-        const [endHours, endMinutes] = shiftEndTime.split(':').map(Number)
-        const endTime = new Date(now)
-        endTime.setHours(endHours, endMinutes, 0, 0)
-
-        if (now < endTime) {
+        const result = calculateAttendanceTiming(
+          shiftStartTime,
+          effectiveEndTime,
+          shiftLateTolerance,
+          now,
+          'PULANG'
+        )
+        if (result.isEarly) {
           attendanceStatus = 'PULANG_CEPAT'
-          // Calculate minutes early
-          const diffMs = endTime.getTime() - now.getTime()
-          earlyMinutes = Math.ceil(diffMs / 60000)
+          earlyMinutes = result.earlyMinutes
         }
+      }
+    }
+
+    // Compress attendance photo to save database storage
+    // Resize to 320x240, JPEG quality 60 (~5-15KB vs ~50-100KB raw)
+    let compressedPhoto = photo || null
+    if (compressedPhoto) {
+      try {
+        compressedPhoto = await compressBase64Image(compressedPhoto, {
+          maxWidth: 320,
+          maxHeight: 240,
+          quality: 60,
+        })
+      } catch (compressErr) {
+        console.error('Photo compression failed, storing original:', compressErr)
+        // Keep original if compression fails
       }
     }
 
@@ -184,7 +236,7 @@ export async function POST(request: NextRequest) {
         type,
         latitude,
         longitude,
-        photo: photo || null,
+        photo: compressedPhoto,
         confidence: confidence || 0,
         status: attendanceStatus,
         shiftId: shiftId,
@@ -221,6 +273,8 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
     const status = searchParams.get('status')
     const type = searchParams.get('type')
+    const searchName = searchParams.get('searchName')
+    const showDeleted = searchParams.get('showDeleted') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const skip = (page - 1) * limit
@@ -231,6 +285,11 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {}
     if (effectiveUserId) {
       where.userId = effectiveUserId
+    }
+
+    // Exclude soft-deleted by default (admin can toggle to see them)
+    if (!showDeleted) {
+      where.isDeleted = false
     }
 
     if (startDate || endDate) {
@@ -246,6 +305,13 @@ export async function GET(request: NextRequest) {
 
     if (type) {
       where.type = type
+    }
+
+    // Filter by employee name
+    if (searchName && searchName.trim()) {
+      where.user = {
+        nama: { contains: searchName.trim() },
+      }
     }
 
     const [attendances, total] = await Promise.all([
@@ -293,6 +359,24 @@ export async function GET(request: NextRequest) {
       db.attendance.count({ where }),
     ])
 
+    // Resolve admin names for editedBy, deletedBy, manualBy
+    const adminIds = [
+      ...new Set(
+        attendances
+          .flatMap((att) => [att.editedBy, att.deletedBy, att.manualBy])
+          .filter(Boolean) as string[]
+      ),
+    ]
+
+    const adminUsers = adminIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, nama: true, role: true },
+        })
+      : []
+
+    const adminMap = new Map(adminUsers.map((u) => [u.id, u]))
+
     // Calculate lateMinutes and earlyMinutes for each attendance
     const attendancesWithCalculations = attendances.map((att) => {
       let lateMinutes: number | null = null
@@ -304,39 +388,34 @@ export async function GET(request: NextRequest) {
       if (shiftData) {
         const attDate = new Date(att.createdAt)
 
-        if (att.type === 'MASUK' && att.status === 'TELAT') {
-          // Calculate minutes late: compare attendance time against shift start + tolerance
-          const [startH, startM] = shiftData.startTime.split(':').map(Number)
-          const shiftStart = new Date(attDate)
-          shiftStart.setHours(startH, startM + (shiftData.lateTolerance || 0), 0, 0)
-          const diffMs = attDate.getTime() - shiftStart.getTime()
-          if (diffMs > 0) {
-            lateMinutes = Math.ceil(diffMs / 60000)
-          }
-        } else if (att.type === 'MASUK' && att.status === 'HADIR') {
-          // Even if not late, check if they arrived after the shift start time
-          const [startH, startM] = shiftData.startTime.split(':').map(Number)
-          const shiftStart = new Date(attDate)
-          shiftStart.setHours(startH, startM, 0, 0)
-          const diffMs = attDate.getTime() - shiftStart.getTime()
-          if (diffMs > 0) {
-            lateMinutes = Math.ceil(diffMs / 60000)
+        if (att.type === 'MASUK') {
+          const result = calculateAttendanceTiming(
+            shiftData.startTime,
+            shiftData.endTime,
+            shiftData.lateTolerance || 0,
+            attDate,
+            'MASUK'
+          )
+          if (result.isLate) {
+            lateMinutes = result.lateMinutes
           }
         }
 
         if (att.type === 'PULANG') {
-          // Check for early departure
-          const [endH, endM] = shiftData.endTime.split(':').map(Number)
-          const shiftEnd = new Date(attDate)
-          shiftEnd.setHours(endH, endM, 0, 0)
-          const diffMs = shiftEnd.getTime() - attDate.getTime()
-          if (diffMs > 0) {
-            earlyMinutes = Math.ceil(diffMs / 60000)
+          const result = calculateAttendanceTiming(
+            shiftData.startTime,
+            shiftData.endTime,
+            shiftData.lateTolerance || 0,
+            attDate,
+            'PULANG'
+          )
+          if (result.isEarly) {
+            earlyMinutes = result.earlyMinutes
           }
         }
       }
 
-      // Also try to parse from the note field if no shift data
+      // Also try to parse from the note field if no shift data or no calculated value
       if (!lateMinutes && att.note) {
         const lateMatch = att.note.match(/Terlambat\s+(\d+)\s+menit/)
         if (lateMatch) lateMinutes = parseInt(lateMatch[1])
@@ -350,6 +429,9 @@ export async function GET(request: NextRequest) {
         ...att,
         lateMinutes,
         earlyMinutes,
+        editedByUser: att.editedBy ? adminMap.get(att.editedBy) || null : null,
+        deletedByUser: att.deletedBy ? adminMap.get(att.deletedBy) || null : null,
+        manualByUser: att.manualBy ? adminMap.get(att.manualBy) || null : null,
       }
     })
 

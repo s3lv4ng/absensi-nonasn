@@ -25,9 +25,11 @@ import {
   Settings,
   FileBarChart,
   ClipboardCheck,
+  TableProperties,
   TrendingUp,
   Activity,
   Eye,
+  PenLine,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
@@ -46,6 +48,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Separator } from '@/components/ui/separator'
+import { ManualAttendanceDialog } from '@/components/admin/manual-attendance-dialog'
 
 // ---------------------------------------------------------------------------
 // Types for API response
@@ -263,6 +266,7 @@ export function AdminDashboard() {
   const [todayAttendances, setTodayAttendances] = useState<Attendance[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [manualDialogOpen, setManualDialogOpen] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -767,7 +771,15 @@ export function AdminDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <QuickActionButton
+                icon={PenLine}
+                label="Absensi Manual"
+                description="Input manual"
+                onClick={() => setManualDialogOpen(true)}
+                colorClass="bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400"
+                hoverClass="hover:bg-teal-200 dark:hover:bg-teal-900/40"
+              />
               <QuickActionButton
                 icon={Users}
                 label="Kelola Pegawai"
@@ -785,10 +797,10 @@ export function AdminDashboard() {
                 hoverClass="hover:bg-gray-200 dark:hover:bg-gray-700/50"
               />
               <QuickActionButton
-                icon={FileBarChart}
-                label="Laporan"
-                description="Rekap absensi"
-                onClick={() => setCurrentView('admin-reports')}
+                icon={TableProperties}
+                label="Rekap Absen"
+                description="Cetak rekap"
+                onClick={() => setCurrentView('admin-rekap-absen')}
                 colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
                 hoverClass="hover:bg-emerald-200 dark:hover:bg-emerald-900/40"
               />
@@ -804,6 +816,15 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ================================================================= */}
+      {/* Manual Attendance Dialog                                          */}
+      {/* ================================================================= */}
+      <ManualAttendanceDialog
+        open={manualDialogOpen}
+        onOpenChange={setManualDialogOpen}
+        onSuccess={fetchData}
+      />
     </motion.div>
   )
 }

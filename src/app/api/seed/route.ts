@@ -66,6 +66,25 @@ export async function POST() {
       },
     })
 
+    // Create default work shift
+    const defaultShift = await db.workShift.create({
+      data: {
+        name: 'Reguler',
+        startTime: '08:00',
+        endTime: '17:00',
+        lateTolerance: 15,
+        workDays: '1,2,3,4,5',
+        color: '#1e40af',
+        isActive: true,
+      },
+    })
+
+    // Assign shift to admin
+    await db.user.update({
+      where: { id: admin.id },
+      data: { shiftId: defaultShift.id },
+    })
+
     // Create sample holidays
     const holidays = [
       { name: 'Tahun Baru', date: new Date('2025-01-01'), type: 'NASIONAL' },

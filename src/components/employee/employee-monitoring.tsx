@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -26,6 +27,12 @@ import {
 } from '@/components/ui/dialog'
 import type { EmployeeMonitorEntry } from '@/types'
 import { DataPagination } from '@/components/shared/data-pagination'
+
+// Dynamic import for AvatarMap - Leaflet requires DOM, can't SSR
+const AvatarMap = dynamic(
+  () => import('./avatar-map').then((mod) => mod.AvatarMap),
+  { ssr: false }
+)
 
 // ---------------------------------------------------------------------------
 // Animation variants
@@ -843,7 +850,7 @@ export function EmployeeMonitoring() {
       {/* Map Dialog                                                        */}
       {/* ================================================================= */}
       <Dialog open={!!selectedEmployee} onOpenChange={(open) => !open && setSelectedEmployee(null)}>
-        <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30">
+        <DialogContent className="sm:max-w-3xl bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
               <MapPin className="size-5" />
@@ -925,28 +932,60 @@ export function EmployeeMonitoring() {
                 </div>
               </div>
 
-              {/* Map Preview */}
+              {/* Two Maps: Masuk & Pulang */}
               {(() => {
-                const lat = selectedEmployee.pulangLat ?? selectedEmployee.masukLat
-                const lng = selectedEmployee.pulangLng ?? selectedEmployee.masukLng
-                if (lat != null) {
-                  return (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Peta Lokasi</p>
-                      <div className="rounded-xl overflow-hidden border border-blue-100/50 dark:border-blue-900/30">
-                        <iframe
-                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng!-0.005}%2C${lat!-0.003}%2C${lng!+0.005}%2C${lat!+0.003}&layer=mapnik&marker=${lat}%2C${lng}`}
-                          width="100%"
-                          height="250"
-                          style={{ border: 0 }}
-                          loading="lazy"
-                          title="Lokasi Absensi"
+                const hasMasuk = selectedEmployee.masukLat != null && selectedEmployee.masukLng != null
+                const hasPulang = selectedEmployee.pulangLat != null && selectedEmployee.pulangLng != null
+
+                if (!hasMasuk && !hasPulang) return null
+
+                return (
+                  <div className={`grid gap-4 ${hasMasuk && hasPulang ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    {/* Map Masuk */}
+                    {hasMasuk && (
+                      <div className="space-y-2">
+                        <AvatarMap
+                          lat={selectedEmployee.masukLat!}
+                          lng={selectedEmployee.masukLng!}
+                          photo={selectedEmployee.photo}
+                          name={selectedEmployee.nama}
+                          label="Lokasi Absen Masuk"
                         />
+                        <a
+                          href={`https://www.google.com/maps?q=${selectedEmployee.masukLat},${selectedEmployee.masukLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs font-medium transition-colors"
+                        >
+                          <Navigation className="size-3" />
+                          Buka di Google Maps
+                        </a>
                       </div>
-                    </div>
-                  )
-                }
-                return null
+                    )}
+
+                    {/* Map Pulang */}
+                    {hasPulang && (
+                      <div className="space-y-2">
+                        <AvatarMap
+                          lat={selectedEmployee.pulangLat!}
+                          lng={selectedEmployee.pulangLng!}
+                          photo={selectedEmployee.photo}
+                          name={selectedEmployee.nama}
+                          label="Lokasi Absen Pulang"
+                        />
+                        <a
+                          href={`https://www.google.com/maps?q=${selectedEmployee.pulangLat},${selectedEmployee.pulangLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1e40af] hover:bg-[#1e3a8a] text-white text-xs font-medium transition-colors"
+                        >
+                          <Navigation className="size-3" />
+                          Buka di Google Maps
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )
               })()}
             </div>
           )}

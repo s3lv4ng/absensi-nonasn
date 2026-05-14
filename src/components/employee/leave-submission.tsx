@@ -254,13 +254,14 @@ export function LeaveSubmission() {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('type', 'attachment')
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || 'Gagal mengupload file')
       }
       const data = await res.json()
-      return data.url
+      return data.url || data.path
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal mengupload file')
       return null
