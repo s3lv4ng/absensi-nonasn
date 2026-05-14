@@ -10,8 +10,6 @@ import {
   ExternalLink,
   RefreshCw,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Activity,
   CalendarDays,
   Fingerprint,
@@ -22,6 +20,7 @@ import {
 
 import { useAppStore } from '@/store'
 import type { Attendance, AttendanceStatus, AttendanceType, OfficeSetting } from '@/types'
+import { DataPagination } from '@/components/shared/data-pagination'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -468,7 +467,7 @@ export function AttendanceMonitoring() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
-  const limit = 20
+  const [limit, setLimit] = useState(10)
 
   // ---- Fetch office settings ----
   useEffect(() => {
@@ -523,7 +522,7 @@ export function AttendanceMonitoring() {
     } finally {
       setIsLoading(false)
     }
-  }, [page, dateFilter, statusFilter, typeFilter])
+  }, [page, dateFilter, statusFilter, typeFilter, limit])
 
   useEffect(() => {
     fetchAttendances()
@@ -532,7 +531,7 @@ export function AttendanceMonitoring() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1)
-  }, [dateFilter, statusFilter, typeFilter])
+  }, [dateFilter, statusFilter, typeFilter, limit])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -841,35 +840,21 @@ export function AttendanceMonitoring() {
       {/* ================================================================= */}
       {/* Pagination                                                        */}
       {/* ================================================================= */}
-      {totalPages > 1 && (
-        <motion.div variants={itemVariants} className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Halaman {page} dari {totalPages} ({total} data)
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || isLoading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              <ChevronLeft className="size-4 mr-1" />
-              Sebelumnya
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages || isLoading}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              Selanjutnya
-              <ChevronRight className="size-4 ml-1" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
+      <motion.div variants={itemVariants}>
+        <DataPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit)
+            setPage(1)
+          }}
+          isLoading={isLoading}
+          itemLabel="absensi"
+        />
+      </motion.div>
 
       {/* ================================================================= */}
       {/* Detail Dialog                                                     */}

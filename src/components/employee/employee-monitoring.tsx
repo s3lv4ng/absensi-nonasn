@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import {
   Users, CheckCircle2, XCircle, Clock, AlertTriangle, LogIn, LogOut,
   Briefcase, Heart, Stethoscope, Plane, FileText, UserX, Loader2,
-  Search, RefreshCw, Filter, ChevronLeft, ChevronRight, MapPin, Navigation,
+  Search, RefreshCw, Filter, MapPin, Navigation,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,6 +25,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 import type { EmployeeMonitorEntry } from '@/types'
+import { DataPagination } from '@/components/shared/data-pagination'
 
 // ---------------------------------------------------------------------------
 // Animation variants
@@ -319,7 +320,7 @@ export function EmployeeMonitoring() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const limit = 20
+  const [limit, setLimit] = useState(10)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -362,7 +363,7 @@ export function EmployeeMonitoring() {
     } finally {
       setIsLoading(false)
     }
-  }, [page])
+  }, [page, limit])
 
   useEffect(() => {
     fetchData()
@@ -479,7 +480,7 @@ export function EmployeeMonitoring() {
 
   return (
     <motion.div
-      className="space-y-6"
+      className="space-y-6 pb-16 md:pb-14"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -781,48 +782,35 @@ export function EmployeeMonitoring() {
       {/* ================================================================= */}
       {/* Pagination                                                        */}
       {/* ================================================================= */}
-      {totalPages > 1 && (
-        <motion.div variants={itemVariants} className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Halaman {page} dari {totalPages} ({total} data)
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || isLoading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              <ChevronLeft className="size-4 mr-1" />
-              Sebelumnya
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages || isLoading}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              Selanjutnya
-              <ChevronRight className="size-4 ml-1" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
+      <motion.div variants={itemVariants}>
+        <DataPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit)
+            setPage(1)
+          }}
+          isLoading={isLoading}
+          itemLabel="pegawai"
+          compact
+        />
+      </motion.div>
 
       {/* ================================================================= */}
-      {/* Total indicator - Sticky at bottom                                */}
+      {/* Total indicator - Fixed at bottom                                 */}
       {/* ================================================================= */}
-      <motion.div variants={itemVariants} className="sticky bottom-0 z-10">
-        <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-          <CardContent className="py-3 px-4">
+      <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-30 px-4 pb-2 md:px-6 md:pb-3">
+        <Card className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
+          <CardContent className="py-2.5 px-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Users className="size-3.5" />
                 Total {total} pegawai
               </span>
-              <span className="flex items-center gap-3">
+              <span className="flex items-center gap-2 sm:gap-3">
                 <span className="flex items-center gap-1">
                   <span className="size-2 rounded-full bg-emerald-500" />
                   {summary.hadir} Hadir
@@ -831,7 +819,7 @@ export function EmployeeMonitoring() {
                   <span className="size-2 rounded-full bg-amber-500" />
                   {summary.telat} Telat
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="hidden sm:flex items-center gap-1">
                   <span className="size-2 rounded-full bg-blue-500" />
                   {izinCutiSakit} Izin/Cuti
                 </span>
@@ -843,7 +831,7 @@ export function EmployeeMonitoring() {
             </div>
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
 
       {/* ================================================================= */}
       {/* Map Dialog                                                        */}

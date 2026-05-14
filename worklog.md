@@ -274,3 +274,26 @@ Stage Summary:
 - Monitor Total indicator now sticky at bottom of viewport
 - Admin Leave Management and Reports both have pagination (20 items per page)
 - All lint checks pass, dev server compiles without errors
+---
+Task ID: 1
+Agent: Main
+Task: Add pagination to Admin Kelola Pegawai, Admin Monitoring Absensi, and fix Pegawai Monitor Total Pegawai positioning
+
+Work Log:
+- Created reusable DataPagination component at `/src/components/shared/data-pagination.tsx` with page numbers, per-page selector (10/20/50/100), first/last page buttons, and compact mode
+- Updated Admin Kelola Pegawai (`employee-management.tsx`): replaced basic prev/next pagination with DataPagination component, changed limit from constant 20 to state 10 with per-page selector, added limit to fetchUsers callback dependencies
+- Updated Admin Monitoring Absensi (`attendance-monitoring.tsx`): replaced basic prev/next pagination with DataPagination component, changed limit from constant 20 to state 10 with per-page selector, added limit to fetchAttendances callback dependencies
+- Fixed Pegawai Monitor (`employee-monitoring.tsx`):
+  - Changed Total Pegawai from `sticky bottom-0` to `fixed bottom-14 md:bottom-0` so it's always at the absolute bottom of the viewport (above mobile navbar on mobile)
+  - Added proper padding (pb-16 md:pb-14) to main content area so content doesn't get hidden behind the fixed bar
+  - Replaced basic pagination with DataPagination component (compact mode)
+  - Changed limit from constant 20 to state 10 with per-page selector
+  - Added limit to fetchData callback dependencies
+  - Made Izin/Cuti indicator hidden on very small screens (hidden sm:flex) to prevent overflow
+  - Increased card opacity to bg-white/95 for better readability over content
+
+Stage Summary:
+- All three modules now have professional pagination with page number buttons, per-page selector, and first/last page navigation
+- Pegawai Monitor Total Pegawai bar is now fixed at the bottom of the viewport, not floating in the middle of the list
+- Default items per page changed from 20 to 10 for better usability
+- All lint checks pass, dev server compiles without errors
