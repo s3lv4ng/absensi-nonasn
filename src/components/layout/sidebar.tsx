@@ -109,6 +109,11 @@ const employeeNavItems: NavItem[] = [
     icon: History,
   },
   {
+    title: 'Pengajuan Izin/Cuti',
+    view: 'employee-leaves',
+    icon: ClipboardCheck,
+  },
+  {
     title: 'Profil',
     view: 'employee-profile',
     icon: UserCircle,

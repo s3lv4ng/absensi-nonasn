@@ -17,6 +17,7 @@ export type AppView =
   | 'employee-dashboard'
   | 'employee-history'
   | 'employee-profile'
+  | 'employee-leaves'
   | 'admin-dashboard'
   | 'admin-employees'
   | 'admin-attendance'

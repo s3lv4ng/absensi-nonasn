@@ -8,6 +8,7 @@ import { RegisterForm } from '@/components/auth/register-form'
 import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
 import { AttendanceHistory } from '@/components/employee/attendance-history'
 import { Profile } from '@/components/employee/profile'
+import { LeaveSubmission } from '@/components/employee/leave-submission'
 import { AdminDashboard } from '@/components/admin/admin-dashboard'
 import { EmployeeManagement } from '@/components/admin/employee-management'
 import { AttendanceMonitoring } from '@/components/admin/attendance-monitoring'
@@ -48,6 +49,8 @@ function ViewRenderer() {
       return <EmployeeDashboard />
     case 'employee-history':
       return <AttendanceHistory />
+    case 'employee-leaves':
+      return <LeaveSubmission />
     case 'employee-profile':
       return <Profile />
     default:

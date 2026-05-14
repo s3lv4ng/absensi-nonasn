@@ -26,3 +26,25 @@ Stage Summary:
 - 5 new API routes created, 1 updated
 - 4 new/updated UI components
 - Data seeded: Reguler/Security/Jaga Malam/Driver/CS shifts, 2 office locations
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Add Employee Leave Submission (Pengajuan Dinas/Cuti/Izin) for Pegawai role + Mobile Bottom Navbar for Smartphone/Android
+
+Work Log:
+- Added 'employee-leaves' to AppView type in types/index.ts
+- Created LeaveSubmission component (src/components/employee/leave-submission.tsx): full form for IZIN/CUTI/SAKIT/DINAS with type selection cards, date range picker, reason textarea, stats cards, filter by status, expandable leave cards, cancel PENDING requests
+- Created MobileNavbar component (src/components/layout/mobile-navbar.tsx): bottom navigation bar with 5 items (Home, Absensi, Pengajuan, Riwayat, Profil for Pegawai; Dashboard, Pegawai, Izin/Cuti, Laporan, Setting for Admin), glassmorphism design, active indicator, safe-area support for iPhone notch
+- Updated sidebar: added "Pengajuan Izin/Cuti" menu item for Pegawai role
+- Updated page.tsx: added employee-leaves routing with LeaveSubmission component
+- Updated app-layout.tsx: integrated MobileNavbar, added bottom padding (pb-20) for mobile to avoid content hidden behind navbar, hidden desktop footer on mobile
+- Updated header.tsx: added 'Pengajuan Izin/Cuti' view title for employee-leaves
+- Updated /api/leaves DELETE handler: employees can now cancel their own PENDING requests (previously admin-only)
+- All linting passes clean
+
+Stage Summary:
+- Employee role now has full leave submission capability (Dinas/Cuti/Izin/Sakit)
+- Mobile bottom navbar added with responsive design (hidden on md+ screens)
+- Leave API updated for employee self-service cancellation
+- 2 new components created, 5 existing files updated

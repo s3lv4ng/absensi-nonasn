@@ -34,6 +34,7 @@ const viewTitles: Record<AppView, string> = {
   'employee-dashboard': 'Dashboard',
   'employee-history': 'Riwayat Absensi',
   'employee-profile': 'Profil',
+  'employee-leaves': 'Pengajuan Izin/Cuti',
   'admin-dashboard': 'Dashboard Admin',
   'admin-employees': 'Kelola Pegawai',
   'admin-attendance': 'Monitoring Absensi',

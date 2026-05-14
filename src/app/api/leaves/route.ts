@@ -132,8 +132,8 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const authUser = await getAuthUser()
-    if (!authUser || authUser.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+    if (!authUser) {
+      return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -141,6 +141,20 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'ID wajib diisi' }, { status: 400 })
+    }
+
+    // If not admin, check if the leave belongs to the user and is PENDING
+    if (authUser.role !== 'ADMIN') {
+      const leave = await db.leaveRequest.findUnique({ where: { id } })
+      if (!leave) {
+        return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 })
+      }
+      if (leave.userId !== authUser.userId) {
+        return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+      }
+      if (leave.status !== 'PENDING') {
+        return NextResponse.json({ error: 'Hanya pengajuan dengan status Menunggu yang dapat dibatalkan' }, { status: 400 })
+      }
     }
 
     await db.leaveRequest.delete({ where: { id } })
