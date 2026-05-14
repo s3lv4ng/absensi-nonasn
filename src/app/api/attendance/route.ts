@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check face verification flag
-    if (faceVerified === false) {
+    if (faceVerified !== true) {
       return NextResponse.json(
         { error: 'Verifikasi wajah gagal. Wajah tidak cocok dengan data yang terdaftar.' },
         { status: 400 }
@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
       include: { shift: true },
     })
 
-    // Check if user has registered face data
-    if (userWithShift && !userWithShift.faceDescriptor && faceVerified !== true) {
+    // Check if user has registered face data - MUST have face registered to attend
+    if (userWithShift && !userWithShift.faceDescriptor) {
       return NextResponse.json(
-        { error: 'Data wajah belum terdaftar. Silakan daftarkan wajah Anda terlebih dahulu.' },
+        { error: 'Data wajah belum terdaftar. Silakan daftarkan wajah Anda di halaman Profil terlebih dahulu.' },
         { status: 400 }
       )
     }

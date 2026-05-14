@@ -175,60 +175,52 @@ export function CameraView({ onCapture, storedFaceDescriptor }: CameraViewProps)
         img.src = capturedPhoto
       })
 
-      if (storedFaceDescriptor) {
-        // Verify face against stored descriptor
-        const result = await verifyFace(img, storedFaceDescriptor)
+      if (!storedFaceDescriptor) {
+        // No stored descriptor - face must be registered first
+        setVerifyError('Data wajah belum terdaftar. Silakan daftarkan wajah Anda di halaman Profil terlebih dahulu.')
+        setVerifiedData({
+          photo: capturedPhoto,
+          confidence: 0,
+          isVerified: false,
+          label: 'Wajah Belum Terdaftar',
+          distance: Infinity,
+        })
+        setVerifyStatus('rejected')
+        return
+      }
 
-        if (!result.faceDetected) {
-          setVerifyError(result.error || 'Wajah tidak terdeteksi dalam foto.')
-          setVerifyStatus('rejected')
-          return
-        }
+      // Verify face against stored descriptor
+      const result = await verifyFace(img, storedFaceDescriptor)
 
-        if (!result.isVerified) {
-          setVerifiedData({
-            photo: capturedPhoto,
-            confidence: result.confidence,
-            isVerified: false,
-            label: result.label,
-            distance: result.distance,
-          })
-          setVerifyError(result.error || 'Wajah tidak cocok dengan data yang terdaftar.')
-          setVerifyStatus('rejected')
-          return
-        }
+      if (!result.faceDetected) {
+        setVerifyError(result.error || 'Wajah tidak terdeteksi dalam foto.')
+        setVerifyStatus('rejected')
+        return
+      }
 
-        // Face verified successfully
+      if (!result.isVerified) {
         setVerifiedData({
           photo: capturedPhoto,
           confidence: result.confidence,
-          isVerified: true,
+          isVerified: false,
           label: result.label,
           distance: result.distance,
         })
-        setVerifyStatus('verified')
-        onCapture(capturedPhoto, result.confidence, true)
-      } else {
-        // No stored descriptor - just detect face and accept
-        const result = await verifyFace(img, JSON.stringify(Array(128).fill(0)))
-
-        if (!result.faceDetected) {
-          setVerifyError('Wajah tidak terdeteksi dalam foto. Pastikan wajah terlihat jelas.')
-          setVerifyStatus('rejected')
-          return
-        }
-
-        // No stored descriptor to compare - accept with moderate confidence
-        setVerifiedData({
-          photo: capturedPhoto,
-          confidence: 0.75,
-          isVerified: true,
-          label: 'Wajah Terdeteksi',
-          distance: 0,
-        })
-        setVerifyStatus('verified')
-        onCapture(capturedPhoto, 0.75, true)
+        setVerifyError(result.error || 'Wajah tidak cocok dengan data yang terdaftar.')
+        setVerifyStatus('rejected')
+        return
       }
+
+      // Face verified successfully
+      setVerifiedData({
+        photo: capturedPhoto,
+        confidence: result.confidence,
+        isVerified: true,
+        label: result.label,
+        distance: result.distance,
+      })
+      setVerifyStatus('verified')
+      onCapture(capturedPhoto, result.confidence, true)
     } catch (err) {
       console.error('[CameraView] Verification error:', err)
       setVerifyError('Terjadi kesalahan saat verifikasi wajah. Silakan coba lagi.')
@@ -259,7 +251,7 @@ export function CameraView({ onCapture, storedFaceDescriptor }: CameraViewProps)
               <p className="text-xs text-blue-600/70 dark:text-blue-400/70">
                 {storedFaceDescriptor
                   ? 'Wajah akan dicocokkan dengan data terdaftar'
-                  : 'Posisikan wajah di area oval'}
+                  : '⚠️ Daftarkan wajah Anda di Profil terlebih dahulu'}
               </p>
             </div>
             {storedFaceDescriptor && (

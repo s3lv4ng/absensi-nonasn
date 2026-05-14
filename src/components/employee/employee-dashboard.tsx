@@ -227,6 +227,13 @@ export function EmployeeDashboard() {
   }
 
   const handleOpenAttendanceDialog = (type: AttendanceType) => {
+    // Block if no face descriptor registered
+    if (!userFaceDescriptor && !user?.faceDescriptor) {
+      toast.error('Data wajah belum terdaftar', {
+        description: 'Silakan daftarkan wajah Anda di halaman Profil terlebih dahulu.',
+      })
+      return
+    }
     setAttendanceType(type)
     setCapturedPhoto(null)
     setCapturedConfidence(0)
@@ -489,14 +496,22 @@ export function EmployeeDashboard() {
                 </div>
               )}
               {!todayData?.hasClockedIn && !isLoadingToday && (
-                <Button
-                  onClick={() => handleOpenAttendanceDialog('MASUK')}
-                  className="mt-4 w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25 h-12 text-base font-semibold"
-                  size="lg"
-                >
-                  <Fingerprint className="mr-2 h-5 w-5" />
-                  Absen Masuk
-                </Button>
+                <>
+                  <Button
+                    onClick={() => handleOpenAttendanceDialog('MASUK')}
+                  disabled={!userFaceDescriptor && !user?.faceDescriptor}
+                    className="mt-4 w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25 h-12 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    size="lg"
+                  >
+                    <Fingerprint className="mr-2 h-5 w-5" />
+                    {!userFaceDescriptor && !user?.faceDescriptor ? 'Daftarkan Wajah Dahulu' : 'Absen Masuk'}
+                  </Button>
+                  {!userFaceDescriptor && !user?.faceDescriptor && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 text-center mt-1">
+                      Daftarkan wajah di Profil untuk absensi
+                    </p>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -574,11 +589,12 @@ export function EmployeeDashboard() {
                 !isLoadingToday && (
                   <Button
                     onClick={() => handleOpenAttendanceDialog('PULANG')}
-                    className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25 h-12 text-base font-semibold"
+                    disabled={!userFaceDescriptor && !user?.faceDescriptor}
+                    className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25 h-12 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
                     <LogOut className="mr-2 h-5 w-5" />
-                    Absen Pulang
+                    {!userFaceDescriptor && !user?.faceDescriptor ? 'Daftarkan Wajah Dahulu' : 'Absen Pulang'}
                   </Button>
                 )}
               {!todayData?.hasClockedIn && !isLoadingToday && (

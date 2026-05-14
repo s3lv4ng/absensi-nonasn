@@ -812,10 +812,10 @@ export function EmployeeMonitoring() {
       )}
 
       {/* ================================================================= */}
-      {/* Total indicator                                                   */}
+      {/* Total indicator - Sticky at bottom                                */}
       {/* ================================================================= */}
-      <motion.div variants={itemVariants}>
-        <Card className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm border-blue-100/50 dark:border-blue-900/30">
+      <motion.div variants={itemVariants} className="sticky bottom-0 z-10">
+        <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">

@@ -1440,9 +1440,7 @@ export function LeaveManagement() {
     setDetailOpen(true)
   }
 
-  const pendingCount = leaves.filter((l) => l.status === 'PENDING').length
-  const approvedCount = leaves.filter((l) => l.status === 'APPROVED').length
-  const rejectedCount = leaves.filter((l) => l.status === 'REJECTED').length
+  const pendingCount = activeTab === 'PENDING' ? total : 0
 
   // ---- Loading state ----
   if (isLoading && leaves.length === 0) return <LeaveSkeleton />
@@ -1611,6 +1609,37 @@ export function LeaveManagement() {
                     </>
                   )}
                 </Tabs>
+
+                {/* Pagination */}
+                {!isLoading && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-blue-100/50 dark:border-blue-900/30">
+                    <p className="text-sm text-muted-foreground">
+                      Halaman {page} dari {totalPages} ({total} data)
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <ChevronLeft className="size-4 mr-1" />
+                        Sebelumnya
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        Selanjutnya
+                        <ChevronRight className="size-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1708,39 +1737,6 @@ export function LeaveManagement() {
       {/* ================================================================= */}
       {/* Detail Dialog                                                     */}
       {/* ================================================================= */}
-      {/* ================================================================= */}
-      {/* Pagination                                                        */}
-      {/* ================================================================= */}
-      {activeMainTab === 'leaves' && totalPages > 1 && (
-        <motion.div variants={itemVariants} className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Halaman {page} dari {totalPages} ({total} data)
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1 || isLoading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              <ChevronLeft className="size-4 mr-1" />
-              Sebelumnya
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages || isLoading}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-            >
-              Selanjutnya
-              <ChevronRight className="size-4 ml-1" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
-
       <LeaveDetailDialog
         leave={detailLeave}
         open={detailOpen}

@@ -25,6 +25,8 @@ import {
   RefreshCw,
   AlertTriangle,
   UserX,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -265,6 +267,8 @@ export function AdminReports() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('persentase')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [reportPage, setReportPage] = useState(1)
+  const reportLimit = 20
 
   const fetchData = useCallback(async () => {
     try {
@@ -324,6 +328,18 @@ export function AdminReports() {
     })
     return summaries
   }, [data?.employeeSummaries, sortField, sortDirection])
+
+  // Pagination for employee summaries
+  const totalReportPages = Math.max(1, Math.ceil(sortedSummaries.length / reportLimit))
+  const paginatedSummaries = useMemo(() => {
+    const start = (reportPage - 1) * reportLimit
+    return sortedSummaries.slice(start, start + reportLimit)
+  }, [sortedSummaries, reportPage, reportLimit])
+
+  // Reset page when sort/filter changes
+  useEffect(() => {
+    setReportPage(1)
+  }, [sortField, sortDirection, month, year])
 
   const chartData = useMemo(() => {
     if (!data?.dailyRates) return []
@@ -679,7 +695,7 @@ export function AdminReports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedSummaries.map((emp, idx) => (
+                    {paginatedSummaries.map((emp, idx) => (
                       <motion.tr
                         key={emp.userId}
                         className="border-b border-blue-50 dark:border-blue-900/20 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
@@ -688,7 +704,7 @@ export function AdminReports() {
                         transition={{ delay: idx * 0.03, duration: 0.3 }}
                       >
                         <TableCell className="text-center text-xs text-muted-foreground">
-                          {idx + 1}
+                          {(reportPage - 1) * reportLimit + idx + 1}
                         </TableCell>
                         <TableCell>
                           <span className="text-xs font-mono text-muted-foreground">{emp.nip}</span>
@@ -732,6 +748,37 @@ export function AdminReports() {
                   </TableBody>
                 </Table>
               </ScrollArea>
+            )}
+
+            {/* Pagination */}
+            {sortedSummaries.length > 0 && (
+              <div className="flex items-center justify-between pt-4 border-t border-blue-100/50 dark:border-blue-900/20">
+                <p className="text-sm text-muted-foreground">
+                  Halaman {reportPage} dari {totalReportPages} ({sortedSummaries.length} pegawai)
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reportPage <= 1}
+                    onClick={() => setReportPage((p) => Math.max(1, p - 1))}
+                    className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    <ChevronLeft className="size-4 mr-1" />
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reportPage >= totalReportPages}
+                    onClick={() => setReportPage((p) => Math.min(totalReportPages, p + 1))}
+                    className="border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    Selanjutnya
+                    <ChevronRight className="size-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

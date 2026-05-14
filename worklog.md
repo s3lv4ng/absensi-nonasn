@@ -245,3 +245,32 @@ Stage Summary:
 - Sidebar is now organized with logical groupings
 - Scrollbar styling improved for all browsers
 - Employee report date handling is timezone-safe
+
+---
+Task ID: 1
+Agent: Main
+Task: Fix face recognition attendance bug - unregistered face can check in, Fix Monitor Total position, Add Admin Pagination
+
+Work Log:
+- **Face Recognition Fix (Critical Bug)**:
+  - Root cause: CameraView component auto-verified any detected face when no `storedFaceDescriptor` existed (lines 211-231), setting `isVerified: true` with 0.75 confidence
+  - Fixed CameraView: When no `storedFaceDescriptor`, immediately rejects with "Data wajah belum terdaftar" error instead of auto-verifying
+  - Updated CameraView header subtitle: Shows "⚠️ Daftarkan wajah Anda di Profil terlebih dahulu" when no descriptor
+  - Fixed server-side `/api/attendance` POST: Changed `faceVerified === false` check to `faceVerified !== true` (strict equality) - now requires explicit `true`
+  - Added server-side validation: If `faceVerified === true` but user has no `faceDescriptor`, request is rejected with 400 error
+  - Updated EmployeeDashboard: Attendance buttons (Masuk/Pulang) now disabled when face not registered, showing "Daftarkan Wajah Dahulu" text
+  - Added toast error when trying to open attendance dialog without face registration
+- **Monitor Kehadiran Total Position**:
+  - Changed Total Pegawai card from static to `sticky bottom-0 z-10`
+  - Upgraded card style: `bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl` with top shadow for visual separation
+  - Now stays at bottom of viewport while scrolling through employee list
+- **Admin Pagination**:
+  - Leave Management: Added server-side pagination with page/limit params, tab-aware status filtering, Previous/Next buttons
+  - Reports: Added client-side pagination (reportPage, reportLimit=20) with paginatedSummaries slice, Previous/Next buttons, auto-reset on sort/filter change
+
+Stage Summary:
+- Face recognition now correctly rejects unregistered faces both client-side and server-side
+- Attendance buttons disabled until face is registered, with clear visual feedback
+- Monitor Total indicator now sticky at bottom of viewport
+- Admin Leave Management and Reports both have pagination (20 items per page)
+- All lint checks pass, dev server compiles without errors
