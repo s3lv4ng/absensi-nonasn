@@ -3,7 +3,6 @@
 import { useEffect } from 'react'
 import { useAuthStore, useAppStore } from '@/store'
 import { AppLayout } from '@/components/layout/app-layout'
-import { LandingPage } from '@/components/auth/landing-page'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
 import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
@@ -43,7 +42,7 @@ function ViewRenderer() {
     case 'employee-profile':
       return <Profile />
     default:
-      return <LandingPage />
+      return <LoginForm />
   }
 }
 
@@ -83,7 +82,7 @@ export default function Home() {
     return <LoadingScreen />
   }
 
-  const publicViews = ['landing', 'login', 'register']
+  const publicViews = ['login', 'register']
   const isPublicView = publicViews.includes(currentView)
 
   if (!isAuthenticated || isPublicView) {

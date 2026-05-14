@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Ignore errors on logout
     }
     set({ user: null, isAuthenticated: false, isLoading: false })
-    useAppStore.getState().setCurrentView('landing')
+    useAppStore.getState().setCurrentView('login')
   },
 
   hasRole: (role) => {
@@ -78,7 +78,7 @@ interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  currentView: 'landing',
+  currentView: 'login',
   sidebarOpen: false,
 
   setCurrentView: (currentView) => set({ currentView }),
