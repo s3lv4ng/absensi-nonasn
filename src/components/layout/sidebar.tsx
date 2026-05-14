@@ -16,6 +16,7 @@ import {
   UserCheck,
   Tag,
   Eye,
+  TableProperties,
 } from 'lucide-react'
 import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
@@ -93,6 +94,11 @@ const reportItems: NavItem[] = [
     title: 'Laporan Pegawai',
     view: 'admin-employee-report',
     icon: UserCheck,
+  },
+  {
+    title: 'Cetak Rekap Absen',
+    view: 'admin-rekap-absen',
+    icon: TableProperties,
   },
 ]
 

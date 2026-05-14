@@ -29,6 +29,7 @@ export type AppView =
   | 'admin-shifts'
   | 'admin-employee-report'
   | 'admin-leave-types'
+  | 'admin-rekap-absen'
 
 export interface User {
   id: string

@@ -20,6 +20,7 @@ import { OfficeManagement } from '@/components/admin/office-management'
 import { ShiftManagement } from '@/components/admin/shift-management'
 import { EmployeeReport } from '@/components/admin/employee-report'
 import { LeaveTypeManagement } from '@/components/admin/leave-type-management'
+import { RekapAbsen } from '@/components/admin/rekap-absen'
 
 function ViewRenderer() {
   const { currentView } = useAppStore()
@@ -49,6 +50,8 @@ function ViewRenderer() {
       return <EmployeeReport />
     case 'admin-leave-types':
       return <LeaveTypeManagement />
+    case 'admin-rekap-absen':
+      return <RekapAbsen />
     case 'employee-dashboard':
       return <EmployeeDashboard />
     case 'employee-history':
