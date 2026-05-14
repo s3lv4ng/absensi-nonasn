@@ -14,6 +14,9 @@ import { AttendanceMonitoring } from '@/components/admin/attendance-monitoring'
 import { AdminSettings } from '@/components/admin/settings'
 import { AdminReports } from '@/components/admin/reports'
 import { LeaveManagement } from '@/components/admin/leave-management'
+import { OfficeManagement } from '@/components/admin/office-management'
+import { ShiftManagement } from '@/components/admin/shift-management'
+import { EmployeeReport } from '@/components/admin/employee-report'
 
 function ViewRenderer() {
   const { currentView } = useAppStore()
@@ -35,6 +38,12 @@ function ViewRenderer() {
       return <AdminReports />
     case 'admin-leaves':
       return <LeaveManagement />
+    case 'admin-offices':
+      return <OfficeManagement />
+    case 'admin-shifts':
+      return <ShiftManagement />
+    case 'admin-employee-report':
+      return <EmployeeReport />
     case 'employee-dashboard':
       return <EmployeeDashboard />
     case 'employee-history':
@@ -72,12 +81,10 @@ export default function Home() {
   const { isAuthenticated, isLoading, initialized, initialize } = useAuthStore()
   const { currentView } = useAppStore()
 
-  // Initialize auth on mount
   useEffect(() => {
     initialize()
   }, [initialize])
 
-  // Show loading screen while checking auth
   if (isLoading && !initialized) {
     return <LoadingScreen />
   }

@@ -18,12 +18,14 @@ model User {
   faceDescriptor String?  // JSON string of face embedding vector
   unitKerja     String?
   jabatan       String?
+  shiftId       String?   // Assigned work shift
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   attendances   Attendance[]
   leaveRequests LeaveRequest[]
+  shift         WorkShift? @relation(fields: [shiftId], references: [id])
 }
 
 model Attendance {
@@ -32,17 +34,47 @@ model Attendance {
   type        String   // MASUK | PULANG
   latitude    Float
   longitude   Float
-  photo       String?  // Base64 or URL of captured photo
-  confidence  Float    @default(0) // Face matching confidence score
-  status      String   @default("HADIR") // HADIR | TELAT | IZIN | CUTI | ALPHA
+  photo       String?
+  confidence  Float    @default(0)
+  status      String   @default("HADIR") // HADIR | TELAT | IZIN | CUTI | ALPHA | DINAS
   note        String?
+  shiftId     String?  // Which shift this attendance belongs to
   createdAt   DateTime @default(now())
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift       WorkShift? @relation(fields: [shiftId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
   @@index([status])
+}
+
+model Office {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  latitude    Float
+  longitude   Float
+  radiusMeter Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkShift {
+  id          String   @id @default(cuid())
+  name        String   // e.g. "Reguler", "Security", "Jaga Malam", "Driver", "CS"
+  startTime   String   // "08:00"
+  endTime     String   // "17:00"
+  lateTolerance Int    @default(15) // minutes
+  workDays    String   @default("1,2,3,4,5") // 0=Minggu, 1=Senin, etc.
+  color       String   @default("#1e40af") // Display color for this shift
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  attendances Attendance[]
 }
 
 model OfficeSetting {
@@ -51,10 +83,10 @@ model OfficeSetting {
   latitude    Float    @default(-6.2088)
   longitude   Float    @default(106.8456)
   radiusMeter Int      @default(100)
-  startTime   String   @default("08:00") // Jam masuk
-  endTime     String   @default("17:00") // Jam pulang
-  lateTolerance Int    @default(15) // Toleransi keterlambatan (menit)
-  workDays    String   @default("1,2,3,4,5") // Senin-Jumat (0=Minggu)
+  startTime   String   @default("08:00")
+  endTime     String   @default("17:00")
+  lateTolerance Int    @default(15)
+  workDays    String   @default("1,2,3,4,5")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -73,13 +105,14 @@ model Holiday {
 model LeaveRequest {
   id          String   @id @default(cuid())
   userId      String
-  type        String   // IZIN | CUTI | SAKIT
+  type        String   // IZIN | CUTI | SAKIT | DINAS
   startDate   DateTime
   endDate     DateTime
   reason      String
   status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
   approvedBy  String?
   approvedAt  DateTime?
+  isManualEntry Boolean @default(false) // true if created by admin
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

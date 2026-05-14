@@ -39,7 +39,10 @@ const viewTitles: Record<AppView, string> = {
   'admin-attendance': 'Monitoring Absensi',
   'admin-settings': 'Pengaturan',
   'admin-reports': 'Laporan',
-  'admin-leaves': 'Persetujuan Izin',
+  'admin-leaves': 'Izin / Cuti / Dinas',
+  'admin-offices': 'Lokasi Kantor',
+  'admin-shifts': 'Jam Kerja',
+  'admin-employee-report': 'Laporan Pegawai',
 }
 
 export function AppHeader() {

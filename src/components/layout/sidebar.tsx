@@ -11,6 +11,9 @@ import {
   UserCircle,
   LogOut,
   Fingerprint,
+  MapPin,
+  Clock,
+  UserCheck,
 } from 'lucide-react'
 import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
@@ -62,15 +65,30 @@ const adminNavItems: NavItem[] = [
     icon: Monitor,
   },
   {
+    title: 'Izin / Cuti / Dinas',
+    view: 'admin-leaves',
+    icon: ClipboardCheck,
+    badge: 'Baru',
+  },
+  {
     title: 'Laporan',
     view: 'admin-reports',
     icon: FileBarChart,
   },
   {
-    title: 'Persetujuan Izin',
-    view: 'admin-leaves',
-    icon: ClipboardCheck,
-    badge: 'Baru',
+    title: 'Laporan Pegawai',
+    view: 'admin-employee-report',
+    icon: UserCheck,
+  },
+  {
+    title: 'Lokasi Kantor',
+    view: 'admin-offices',
+    icon: MapPin,
+  },
+  {
+    title: 'Jam Kerja',
+    view: 'admin-shifts',
+    icon: Clock,
   },
   {
     title: 'Pengaturan',

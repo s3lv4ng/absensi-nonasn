@@ -2,11 +2,11 @@ export type Role = 'ADMIN' | 'PEGAWAI'
 
 export type AttendanceType = 'MASUK' | 'PULANG'
 
-export type AttendanceStatus = 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'ALPHA'
+export type AttendanceStatus = 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'ALPHA' | 'DINAS'
 
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-export type LeaveType = 'IZIN' | 'CUTI' | 'SAKIT'
+export type LeaveType = 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS'
 
 export type HolidayType = 'NASIONAL' | 'KEAGAMAAN' | 'KHUSUS'
 
@@ -23,6 +23,9 @@ export type AppView =
   | 'admin-settings'
   | 'admin-reports'
   | 'admin-leaves'
+  | 'admin-offices'
+  | 'admin-shifts'
+  | 'admin-employee-report'
 
 export interface User {
   id: string
@@ -34,9 +37,11 @@ export interface User {
   faceDescriptor: string | null
   unitKerja: string | null
   jabatan: string | null
+  shiftId: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
+  shift?: WorkShift
 }
 
 export interface Attendance {
@@ -49,8 +54,36 @@ export interface Attendance {
   confidence: number
   status: AttendanceStatus
   note: string | null
+  shiftId: string | null
   createdAt: string
   user?: User
+  shift?: WorkShift
+}
+
+export interface Office {
+  id: string
+  name: string
+  address: string | null
+  latitude: number
+  longitude: number
+  radiusMeter: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkShift {
+  id: string
+  name: string
+  startTime: string
+  endTime: string
+  lateTolerance: number
+  workDays: string
+  color: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+  _count?: { users: number }
 }
 
 export interface OfficeSetting {
@@ -86,6 +119,7 @@ export interface LeaveRequest {
   status: LeaveStatus
   approvedBy: string | null
   approvedAt: string | null
+  isManualEntry: boolean
   createdAt: string
   updatedAt: string
   user?: User
@@ -125,4 +159,42 @@ export interface GPSValidationResult {
   distance: number
   maxRadius: number
   message: string
+}
+
+export interface EmployeeDailyRecord {
+  day: number
+  date: string
+  dayName: string
+  isWeekend: boolean
+  masukTime: string | null
+  pulangTime: string | null
+  status: string
+  leaveType: string | null
+  masukId: string | null
+  pulangId: string | null
+}
+
+export interface EmployeeReportData {
+  employee: {
+    id: string
+    nip: string
+    nama: string
+    email: string
+    unitKerja: string | null
+    jabatan: string | null
+    shift: WorkShift | null
+  }
+  dailyRecords: EmployeeDailyRecord[]
+  summary: {
+    totalDays: number
+    hadir: number
+    telat: number
+    izin: number
+    cuti: number
+    sakit: number
+    alpha: number
+    libur: number
+  }
+  month: number
+  year: number
 }
