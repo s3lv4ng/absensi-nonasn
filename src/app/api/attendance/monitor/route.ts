@@ -67,8 +67,25 @@ export async function GET(request: NextRequest) {
         createdAt: true,
         latitude: true,
         longitude: true,
+        note: true,
       },
     })
+
+    // Get all active shifts for late/early calculation
+    const shifts = await db.workShift.findMany({
+      where: { isActive: true },
+    })
+    const shiftMap = new Map(shifts.map((s) => [s.id, s]))
+
+    // Get user shift assignments
+    const userShifts = await db.user.findMany({
+      where: { role: 'PEGAWAI', isActive: true },
+      select: { id: true, shiftId: true },
+    })
+    const userShiftMap = new Map(userShifts.map((u) => [u.id, u.shiftId]))
+
+    // Also get OfficeSetting as fallback
+    const officeSettingFallback = await db.officeSetting.findFirst()
 
     // 5. Get approved leave requests that cover today
     const approvedLeaves = await db.leaveRequest.findMany({
@@ -119,7 +136,62 @@ export async function GET(request: NextRequest) {
       sakit: 0,
       dinas: 0,
       belumAbsen: 0,
+      pulangCepat: 0,
       total: empTotal,
+    }
+
+    // Helper function to calculate late/early minutes
+    function calculateMinutes(att: { createdAt: Date; type: string; status: string; note: string | null }, userId: string): { lateMinutes: number | null; earlyMinutes: number | null } {
+      let lateMinutes: number | null = null
+      let earlyMinutes: number | null = null
+
+      const userShiftId = userShiftMap.get(userId)
+      const shift = userShiftId ? shiftMap.get(userShiftId) : null
+      const effectiveShift = shift || null
+      const fallbackStart = officeSettingFallback?.startTime
+      const fallbackEnd = officeSettingFallback?.endTime
+      const fallbackTolerance = officeSettingFallback?.lateTolerance || 0
+
+      const attDate = new Date(att.createdAt)
+
+      if (att.type === 'MASUK') {
+        const startTime = effectiveShift?.startTime || fallbackStart
+        const tolerance = effectiveShift?.lateTolerance ?? fallbackTolerance
+        if (startTime) {
+          const [startH, startM] = startTime.split(':').map(Number)
+          const shiftStart = new Date(attDate)
+          shiftStart.setHours(startH, startM + tolerance, 0, 0)
+          const diffMs = attDate.getTime() - shiftStart.getTime()
+          if (diffMs > 0) {
+            lateMinutes = Math.ceil(diffMs / 60000)
+          }
+        }
+      }
+
+      if (att.type === 'PULANG') {
+        const endTime = effectiveShift?.endTime || fallbackEnd
+        if (endTime) {
+          const [endH, endM] = endTime.split(':').map(Number)
+          const shiftEnd = new Date(attDate)
+          shiftEnd.setHours(endH, endM, 0, 0)
+          const diffMs = shiftEnd.getTime() - attDate.getTime()
+          if (diffMs > 0) {
+            earlyMinutes = Math.ceil(diffMs / 60000)
+          }
+        }
+      }
+
+      // Fallback to note parsing
+      if (!lateMinutes && att.note) {
+        const lateMatch = att.note.match(/Terlambat\s+(\d+)\s+menit/)
+        if (lateMatch) lateMinutes = parseInt(lateMatch[1])
+      }
+      if (!earlyMinutes && att.note) {
+        const earlyMatch = att.note.match(/Pulang cepat\s+(\d+)\s+menit/)
+        if (earlyMatch) earlyMinutes = parseInt(earlyMatch[1])
+      }
+
+      return { lateMinutes, earlyMinutes }
     }
 
     const employeeStatuses = employees.map((emp) => {
@@ -132,6 +204,28 @@ export async function GET(request: NextRequest) {
       let status: string = 'BELUM_ABSEN'
       let leaveType: string | null = null
       let leaveStatus: string | null = null
+      let lateMinutes: number | null = null
+      let earlyMinutes: number | null = null
+
+      // Calculate late/early minutes from attendance records
+      if (masukRecord) {
+        const calc = calculateMinutes({
+          createdAt: masukRecord.createdAt,
+          type: 'MASUK',
+          status: masukRecord.status,
+          note: null,
+        }, emp.id)
+        lateMinutes = calc.lateMinutes
+      }
+      if (pulangRecord) {
+        const calc = calculateMinutes({
+          createdAt: pulangRecord.createdAt,
+          type: 'PULANG',
+          status: pulangRecord.status,
+          note: null,
+        }, emp.id)
+        earlyMinutes = calc.earlyMinutes
+      }
 
       // Priority 1: If they have an APPROVED leave covering today
       if (userLeave) {
@@ -160,6 +254,11 @@ export async function GET(request: NextRequest) {
         } else {
           status = 'HADIR'
         }
+        // Also check if they have PULANG with early departure
+        if (pulangRecord && earlyMinutes && earlyMinutes > 0) {
+          // Mark as PULANG_CEPAT in addition to HADIR/TELAT
+          // We use a combined approach: keep the primary status but add early departure info
+        }
       }
       // Priority 3: No attendance and no leave
       else {
@@ -184,6 +283,11 @@ export async function GET(request: NextRequest) {
         summary.belumAbsen++
       }
 
+      // Count pulang cepat separately (can overlap with HADIR/TELAT)
+      if (earlyMinutes && earlyMinutes > 0) {
+        summary.pulangCepat++
+      }
+
       // Format times as ISO strings so the frontend can parse them with new Date()
       const formatTime = (date: Date | null): string | null => {
         if (!date) return null
@@ -206,6 +310,8 @@ export async function GET(request: NextRequest) {
         masukLng: masukRecord?.longitude ?? null,
         pulangLat: pulangRecord?.latitude ?? null,
         pulangLng: pulangRecord?.longitude ?? null,
+        lateMinutes,
+        earlyMinutes,
       }
     })
 

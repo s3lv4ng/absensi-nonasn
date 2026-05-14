@@ -2,7 +2,7 @@ export type Role = 'ADMIN' | 'PEGAWAI'
 
 export type AttendanceType = 'MASUK' | 'PULANG'
 
-export type AttendanceStatus = 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'ALPHA' | 'DINAS'
+export type AttendanceStatus = 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'ALPHA' | 'DINAS' | 'PULANG_CEPAT'
 
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
@@ -62,6 +62,8 @@ export interface Attendance {
   createdAt: string
   user?: User
   shift?: WorkShift
+  lateMinutes?: number | null
+  earlyMinutes?: number | null
 }
 
 export interface Office {
@@ -178,6 +180,8 @@ export interface EmployeeDailyRecord {
   leaveType: string | null
   masukId: string | null
   pulangId: string | null
+  lateMinutes: number | null
+  earlyMinutes: number | null
 }
 
 export interface EmployeeReportData {
@@ -200,6 +204,9 @@ export interface EmployeeReportData {
     sakit: number
     alpha: number
     libur: number
+    pulangCepat: number
+    totalLateMinutes: number
+    totalEarlyMinutes: number
   }
   month: number
   year: number
@@ -223,7 +230,7 @@ export interface EmployeeMonitorEntry {
   photo: string | null
   unitKerja: string | null
   jabatan: string | null
-  status: 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS' | 'ALPHA' | 'BELUM_ABSEN'
+  status: 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS' | 'ALPHA' | 'BELUM_ABSEN' | 'PULANG_CEPAT'
   masukTime: string | null
   pulangTime: string | null
   leaveType: string | null
@@ -232,4 +239,6 @@ export interface EmployeeMonitorEntry {
   masukLng: number | null
   pulangLat: number | null
   pulangLng: number | null
+  lateMinutes: number | null
+  earlyMinutes: number | null
 }

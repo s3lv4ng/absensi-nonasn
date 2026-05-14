@@ -180,7 +180,10 @@ export async function GET(request: NextRequest) {
       izin: number
       cuti: number
       alpha: number
+      pulangCepat: number
       lateCount: number
+      totalLateMinutes: number
+      totalEarlyMinutes: number
     }>()
 
     // Get all active employees
@@ -200,11 +203,47 @@ export async function GET(request: NextRequest) {
         izin: 0,
         cuti: 0,
         alpha: 0,
+        pulangCepat: 0,
         lateCount: 0,
+        totalLateMinutes: 0,
+        totalEarlyMinutes: 0,
       })
     }
 
-    // Count attendances per employee
+    // Get PULANG attendances for the month as well (for pulang cepat detection)
+    const monthPulangAttendances = await db.attendance.findMany({
+      where: {
+        type: 'PULANG',
+        createdAt: { gte: monthStart, lt: monthEnd },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            shiftId: true,
+            shift: {
+              select: {
+                id: true,
+                endTime: true,
+              },
+            },
+          },
+        },
+        shift: {
+          select: {
+            id: true,
+            endTime: true,
+          },
+        },
+      },
+    })
+
+    // Also get all active shifts and OfficeSetting for calculations
+    const allShifts = await db.workShift.findMany({ where: { isActive: true } })
+    const shiftMap = new Map(allShifts.map((s) => [s.id, s]))
+    const officeSettingsForCalc = await db.officeSetting.findFirst()
+
+    // Count MASUK attendances per employee
     for (const att of monthAttendances) {
       const entry = employeeMap.get(att.userId)
       if (!entry) continue
@@ -215,12 +254,49 @@ export async function GET(request: NextRequest) {
         entry.telat++
         entry.lateCount++
         entry.hadir++ // telat also counts as present
+
+        // Calculate late minutes
+        const shiftId = att.shiftId
+        const shift = shiftId ? shiftMap.get(shiftId) : null
+        const startTime = shift?.startTime || officeSettingsForCalc?.startTime
+        const tolerance = shift?.lateTolerance ?? officeSettingsForCalc?.lateTolerance ?? 0
+        if (startTime) {
+          const attDate = new Date(att.createdAt)
+          const [startH, startM] = startTime.split(':').map(Number)
+          const shiftStart = new Date(attDate)
+          shiftStart.setHours(startH, startM + tolerance, 0, 0)
+          const diffMs = attDate.getTime() - shiftStart.getTime()
+          if (diffMs > 0) {
+            entry.totalLateMinutes += Math.ceil(diffMs / 60000)
+          }
+        }
       } else if (att.status === 'IZIN') {
         entry.izin++
       } else if (att.status === 'CUTI') {
         entry.cuti++
       } else if (att.status === 'ALPHA') {
         entry.alpha++
+      }
+    }
+
+    // Count PULANG_CEPAT from PULANG attendances
+    for (const att of monthPulangAttendances) {
+      const entry = employeeMap.get(att.userId)
+      if (!entry) continue
+
+      // Calculate early departure minutes
+      const shiftData = att.shift || att.user?.shift || null
+      const endTime = shiftData?.endTime || officeSettingsForCalc?.endTime
+      if (endTime) {
+        const attDate = new Date(att.createdAt)
+        const [endH, endM] = endTime.split(':').map(Number)
+        const shiftEnd = new Date(attDate)
+        shiftEnd.setHours(endH, endM, 0, 0)
+        const diffMs = shiftEnd.getTime() - attDate.getTime()
+        if (diffMs > 0) {
+          entry.pulangCepat++
+          entry.totalEarlyMinutes += Math.ceil(diffMs / 60000)
+        }
       }
     }
 
@@ -248,6 +324,9 @@ export async function GET(request: NextRequest) {
         izin: e.izin,
         cuti: e.cuti,
         alpha: e.alpha,
+        pulangCepat: e.pulangCepat,
+        totalLateMinutes: e.totalLateMinutes,
+        totalEarlyMinutes: e.totalEarlyMinutes,
         persentase,
       }
     })

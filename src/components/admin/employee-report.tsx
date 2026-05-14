@@ -18,6 +18,8 @@ import {
   Briefcase,
   Building2,
   Shield,
+  LogOut,
+  Timer,
 } from 'lucide-react'
 
 import type { EmployeeReportData, EmployeeDailyRecord, User, WorkShift } from '@/types'
@@ -98,6 +100,8 @@ function statusBadgeClass(status: string): string {
       return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-800'
     case 'TELAT':
       return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+    case 'PULANG_CEPAT':
+      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-800'
     case 'IZIN':
       return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800'
     case 'CUTI':
@@ -119,6 +123,7 @@ function statusLabel(status: string): string {
   switch (status) {
     case 'HADIR': return 'Hadir'
     case 'TELAT': return 'Telat'
+    case 'PULANG_CEPAT': return 'Pulang Cepat'
     case 'IZIN': return 'Izin'
     case 'CUTI': return 'Cuti'
     case 'SAKIT': return 'Sakit'
@@ -618,7 +623,7 @@ export function EmployeeReport() {
             {/* ============================================================= */}
             {/* Summary Stat Cards                                             */}
             {/* ============================================================= */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
               <SummaryStatCard
                 label="Hadir"
                 value={report.summary.hadir}
@@ -632,6 +637,13 @@ export function EmployeeReport() {
                 icon={<Clock className="size-5 text-amber-600 dark:text-amber-400" />}
                 colorClass="text-amber-600 dark:text-amber-400"
                 bgClass="bg-amber-50/70 dark:bg-amber-900/10 border-amber-200/50 dark:border-amber-900/30"
+              />
+              <SummaryStatCard
+                label="P. Cepat"
+                value={report.summary.pulangCepat}
+                icon={<LogOut className="size-5 text-orange-600 dark:text-orange-400" />}
+                colorClass="text-orange-600 dark:text-orange-400"
+                bgClass="bg-orange-50/70 dark:bg-orange-900/10 border-orange-200/50 dark:border-orange-900/30"
               />
               <SummaryStatCard
                 label="Izin"
@@ -668,7 +680,21 @@ export function EmployeeReport() {
                 colorClass="text-gray-600 dark:text-gray-400"
                 bgClass="bg-gray-50/70 dark:bg-gray-800/10 border-gray-200/50 dark:border-gray-700/30"
               />
+              <SummaryStatCard
+                label="Tot. Telat"
+                value={report.summary.totalLateMinutes}
+                icon={<Timer className="size-5 text-amber-600 dark:text-amber-400" />}
+                colorClass="text-amber-600 dark:text-amber-400"
+                bgClass="bg-amber-50/70 dark:bg-amber-900/10 border-amber-200/50 dark:border-amber-900/30"
+              />
             </div>
+            {/* Total early minutes info */}
+            {report.summary.totalEarlyMinutes > 0 && (
+              <div className="flex items-center gap-2 text-sm text-orange-600 dark:text-orange-400">
+                <LogOut className="size-4" />
+                <span>Total Pulang Cepat: <strong>{report.summary.totalEarlyMinutes} menit</strong></span>
+              </div>
+            )}
 
             {/* ============================================================= */}
             {/* Daily Attendance Table                                         */}
@@ -721,6 +747,8 @@ export function EmployeeReport() {
                             <TableHead className="w-24">Hari</TableHead>
                             <TableHead className="text-center">Absen Masuk</TableHead>
                             <TableHead className="text-center">Absen Pulang</TableHead>
+                            <TableHead className="text-center">Terlambat</TableHead>
+                            <TableHead className="text-center">P. Cepat</TableHead>
                             <TableHead className="text-center">Status</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -773,6 +801,28 @@ export function EmployeeReport() {
                                     </span>
                                   ) : (
                                     <span className="text-sm text-muted-foreground/50">-</span>
+                                  )}
+                                </TableCell>
+
+                                {/* Terlambat (Late Minutes) */}
+                                <TableCell className="text-center">
+                                  {record.lateMinutes && record.lateMinutes > 0 ? (
+                                    <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                      {record.lateMinutes}m
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">-</span>
+                                  )}
+                                </TableCell>
+
+                                {/* Pulang Cepat (Early Minutes) */}
+                                <TableCell className="text-center">
+                                  {record.earlyMinutes && record.earlyMinutes > 0 ? (
+                                    <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                      {record.earlyMinutes}m
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">-</span>
                                   )}
                                 </TableCell>
 

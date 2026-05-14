@@ -27,6 +27,8 @@ import {
   UserX,
   ChevronLeft,
   ChevronRight,
+  Timer,
+  LogOut,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -64,6 +66,9 @@ interface EmployeeSummary {
   izin: number
   cuti: number
   alpha: number
+  pulangCepat: number
+  totalLateMinutes: number
+  totalEarlyMinutes: number
   persentase: number
 }
 
@@ -83,7 +88,7 @@ interface ReportsData {
   employeeSummaries: EmployeeSummary[]
 }
 
-type SortField = 'nama' | 'nip' | 'unitKerja' | 'hadir' | 'telat' | 'izin' | 'cuti' | 'alpha' | 'persentase'
+type SortField = 'nama' | 'nip' | 'unitKerja' | 'hadir' | 'telat' | 'izin' | 'cuti' | 'alpha' | 'pulangCepat' | 'totalLateMinutes' | 'totalEarlyMinutes' | 'persentase'
 type SortDirection = 'asc' | 'desc'
 
 // ---------------------------------------------------------------------------
@@ -147,6 +152,14 @@ function percentageBg(pct: number): string {
   return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
 }
 
+function formatMinutes(totalMinutes: number): string {
+  if (totalMinutes === 0) return '-'
+  const hours = Math.floor(totalMinutes / 60)
+  const mins = totalMinutes % 60
+  if (hours > 0) return `${hours}j ${mins}m`
+  return `${mins}m`
+}
+
 // ---------------------------------------------------------------------------
 // Custom chart tooltip
 // ---------------------------------------------------------------------------
@@ -201,8 +214,8 @@ function ReportsSkeleton() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i} className="bg-white/70 dark:bg-gray-900/60">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
@@ -433,7 +446,7 @@ export function AdminReports() {
       {/* ================================================================= */}
       {/* Overview Stats                                                    */}
       {/* ================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div variants={itemVariants}>
           <Card className="relative overflow-hidden bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5 hover:shadow-xl hover:shadow-blue-500/10 transition-shadow duration-300">
             <CardContent className="p-5">
@@ -489,6 +502,25 @@ export function AdminReports() {
                 </div>
               </div>
               <div className="absolute -right-4 -top-4 size-24 rounded-full opacity-[0.06] bg-amber-100" />
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
+          <Card className="relative overflow-hidden bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5 hover:shadow-xl hover:shadow-blue-500/10 transition-shadow duration-300">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-3xl font-bold tracking-tight text-foreground">
+                    {data?.employeeSummaries?.filter((e) => e.pulangCepat > 0).length ?? 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground font-medium">Pulang Cepat</p>
+                </div>
+                <div className="size-14 rounded-2xl flex items-center justify-center bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 shadow-lg">
+                  <LogOut className="size-7" />
+                </div>
+              </div>
+              <div className="absolute -right-4 -top-4 size-24 rounded-full opacity-[0.06] bg-orange-100" />
             </CardContent>
           </Card>
         </motion.div>
@@ -656,6 +688,42 @@ export function AdminReports() {
                           <SortIcon field="telat" sortField={sortField} sortDirection={sortDirection} />
                         </button>
                       </TableHead>
+                      <TableHead className="text-center">
+                        <button
+                          className="inline-flex items-center hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
+                          onClick={() => handleSort('totalLateMinutes')}
+                        >
+                          <span className="flex flex-col items-center leading-tight">
+                            <span>Telat</span>
+                            <span className="text-[9px] text-muted-foreground">(menit)</span>
+                          </span>
+                          <SortIcon field="totalLateMinutes" sortField={sortField} sortDirection={sortDirection} />
+                        </button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <button
+                          className="inline-flex items-center hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
+                          onClick={() => handleSort('pulangCepat')}
+                        >
+                          <span className="flex flex-col items-center leading-tight">
+                            <span>P. Cepat</span>
+                            <span className="text-[9px] text-muted-foreground">(kali)</span>
+                          </span>
+                          <SortIcon field="pulangCepat" sortField={sortField} sortDirection={sortDirection} />
+                        </button>
+                      </TableHead>
+                      <TableHead className="text-center">
+                        <button
+                          className="inline-flex items-center hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
+                          onClick={() => handleSort('totalEarlyMinutes')}
+                        >
+                          <span className="flex flex-col items-center leading-tight">
+                            <span>P. Cepat</span>
+                            <span className="text-[9px] text-muted-foreground">(menit)</span>
+                          </span>
+                          <SortIcon field="totalEarlyMinutes" sortField={sortField} sortDirection={sortDirection} />
+                        </button>
+                      </TableHead>
                       <TableHead className="text-center hidden sm:table-cell">
                         <button
                           className="inline-flex items-center hover:text-[#2563eb] dark:hover:text-blue-400 transition-colors"
@@ -725,6 +793,21 @@ export function AdminReports() {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="text-sm font-medium text-amber-600 dark:text-amber-400">{emp.telat}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`text-sm font-medium ${emp.totalLateMinutes > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                            {formatMinutes(emp.totalLateMinutes)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`text-sm font-medium ${emp.pulangCepat > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}>
+                            {emp.pulangCepat || '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`text-sm font-medium ${emp.totalEarlyMinutes > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}>
+                            {formatMinutes(emp.totalEarlyMinutes)}
+                          </span>
                         </TableCell>
                         <TableCell className="text-center hidden sm:table-cell">
                           <span className="text-sm font-medium text-[#2563eb] dark:text-blue-400">{emp.izin}</span>

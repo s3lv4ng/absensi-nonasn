@@ -310,7 +310,9 @@ export function EmployeeDashboard() {
         {
           description:
             attendanceType === 'MASUK' && data.attendance?.status === 'TELAT'
-              ? 'Anda tercatat terlambat hari ini'
+              ? `Anda tercatat terlambat ${data.lateMinutes ? data.lateMinutes + ' menit' : ''}`.trim()
+              : attendanceType === 'PULANG' && data.attendance?.status === 'PULANG_CEPAT'
+              ? `Anda pulang lebih awal ${data.earlyMinutes ? data.earlyMinutes + ' menit' : ''}`.trim()
               : undefined,
         }
       )
@@ -579,10 +581,19 @@ export function EmployeeDashboard() {
                 </div>
               </div>
               {todayData?.hasClockedOut && (
-                <Badge className="bg-white/20 text-white text-[10px] border-0">
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
-                  Selesai
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {todayData.pulang?.status === 'PULANG_CEPAT' ? (
+                    <Badge className="bg-amber-500/90 text-white text-[10px] border-0">
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      Pulang Cepat
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-white/20 text-white text-[10px] border-0">
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Selesai
+                    </Badge>
+                  )}
+                </div>
               )}
               {todayData?.hasClockedIn &&
                 !todayData?.hasClockedOut &&

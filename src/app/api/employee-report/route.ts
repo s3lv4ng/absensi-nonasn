@@ -64,9 +64,17 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Get all shifts and OfficeSetting for time calculations
+    const allShifts = await db.workShift.findMany({ where: { isActive: true } })
+    const shiftMap = new Map(allShifts.map((s) => [s.id, s]))
+    const officeSettingFallback = await db.officeSetting.findFirst()
+
     // Build daily record for each day of the month
     const daysInMonth = new Date(year, month, 0).getDate()
     const dailyRecords = []
+
+    let totalLateMinutes = 0
+    let totalEarlyMinutes = 0
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day)
@@ -82,6 +90,45 @@ export async function GET(request: NextRequest) {
 
       const masuk = dayAttendances.find((a) => a.type === 'MASUK')
       const pulang = dayAttendances.find((a) => a.type === 'PULANG')
+
+      // Calculate lateMinutes and earlyMinutes
+      let dayLateMinutes: number | null = null
+      let dayEarlyMinutes: number | null = null
+
+      // Get shift data for calculations
+      const shiftId = masuk?.shiftId || pulang?.shiftId || employee.shiftId
+      const shift = shiftId ? shiftMap.get(shiftId) : null
+      const effectiveStartTime = shift?.startTime || officeSettingFallback?.startTime
+      const effectiveEndTime = shift?.endTime || officeSettingFallback?.endTime
+      const effectiveTolerance = shift?.lateTolerance ?? officeSettingFallback?.lateTolerance ?? 0
+
+      if (masuk) {
+        const masukDate = new Date(masuk.createdAt)
+        if (effectiveStartTime) {
+          const [startH, startM] = effectiveStartTime.split(':').map(Number)
+          const shiftStart = new Date(masukDate)
+          shiftStart.setHours(startH, startM + effectiveTolerance, 0, 0)
+          const diffMs = masukDate.getTime() - shiftStart.getTime()
+          if (diffMs > 0) {
+            dayLateMinutes = Math.ceil(diffMs / 60000)
+            totalLateMinutes += dayLateMinutes
+          }
+        }
+      }
+
+      if (pulang) {
+        const pulangDate = new Date(pulang.createdAt)
+        if (effectiveEndTime) {
+          const [endH, endM] = effectiveEndTime.split(':').map(Number)
+          const shiftEnd = new Date(pulangDate)
+          shiftEnd.setHours(endH, endM, 0, 0)
+          const diffMs = shiftEnd.getTime() - pulangDate.getTime()
+          if (diffMs > 0) {
+            dayEarlyMinutes = Math.ceil(diffMs / 60000)
+            totalEarlyMinutes += dayEarlyMinutes
+          }
+        }
+      }
 
       // Check if on approved leave
       const dateToCheck = new Date(year, month - 1, day)
@@ -136,6 +183,8 @@ export async function GET(request: NextRequest) {
         leaveType,
         masukId: masuk?.id || null,
         pulangId: pulang?.id || null,
+        lateMinutes: dayLateMinutes,
+        earlyMinutes: dayEarlyMinutes,
       })
     }
 
@@ -149,6 +198,9 @@ export async function GET(request: NextRequest) {
       sakit: dailyRecords.filter((d) => d.status === 'SAKIT').length,
       alpha: dailyRecords.filter((d) => d.status === 'ALPHA').length,
       libur: dailyRecords.filter((d) => d.status === 'LIBUR').length,
+      pulangCepat: dailyRecords.filter((d) => d.earlyMinutes && d.earlyMinutes > 0).length,
+      totalLateMinutes,
+      totalEarlyMinutes,
     }
 
     return NextResponse.json({

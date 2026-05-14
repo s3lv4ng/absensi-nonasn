@@ -127,6 +127,8 @@ function statusColor(status: AttendanceStatus) {
       return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
     case 'TELAT':
       return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+    case 'PULANG_CEPAT':
+      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-800'
     case 'IZIN':
       return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800'
     case 'CUTI':
@@ -422,6 +424,21 @@ function AttendanceCard({
               {Math.round(attendance.confidence * 100)}%
             </span>
           </div>
+          {/* Late/Early minutes indicators */}
+          {(attendance.lateMinutes && attendance.lateMinutes > 0) || (attendance.earlyMinutes && attendance.earlyMinutes > 0) ? (
+            <div className="flex items-center gap-2 mt-1">
+              {attendance.lateMinutes && attendance.lateMinutes > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  Terlambat {attendance.lateMinutes}m
+                </span>
+              )}
+              {attendance.earlyMinutes && attendance.earlyMinutes > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-800">
+                  Pulang Cepat {attendance.earlyMinutes}m
+                </span>
+              )}
+            </div>
+          ) : null}
           {/* Thumbnail photo */}
           {attendance.photo && (
             <div className="mt-2">
@@ -625,6 +642,7 @@ export function AttendanceMonitoring() {
             <SelectItem value="all">Semua Status</SelectItem>
             <SelectItem value="HADIR">Hadir</SelectItem>
             <SelectItem value="TELAT">Telat</SelectItem>
+            <SelectItem value="PULANG_CEPAT">Pulang Cepat</SelectItem>
             <SelectItem value="IZIN">Izin</SelectItem>
             <SelectItem value="CUTI">Cuti</SelectItem>
             <SelectItem value="ALPHA">Alpha</SelectItem>
@@ -657,6 +675,8 @@ export function AttendanceMonitoring() {
                   <TableHead>Tipe</TableHead>
                   <TableHead>Waktu</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Terlambat</TableHead>
+                  <TableHead className="text-center">P. Cepat</TableHead>
                   <TableHead className="hidden lg:table-cell">Lokasi</TableHead>
                   <TableHead className="hidden xl:table-cell">Foto</TableHead>
                   <TableHead className="hidden lg:table-cell">Confidence</TableHead>
@@ -667,7 +687,7 @@ export function AttendanceMonitoring() {
                 <AnimatePresence mode="popLayout">
                   {attendances.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-32 text-center">
+                      <TableCell colSpan={11} className="h-32 text-center">
                         <div className="flex flex-col items-center justify-center space-y-2">
                           <Monitor className="size-10 text-muted-foreground/30" />
                           <p className="text-sm text-muted-foreground">
@@ -736,6 +756,28 @@ export function AttendanceMonitoring() {
                             <Badge variant="outline" className={`text-[10px] px-2 py-0 ${statusColor(att.status)}`}>
                               {att.status}
                             </Badge>
+                          </TableCell>
+
+                          {/* Terlambat (Late Minutes) */}
+                          <TableCell className="text-center">
+                            {att.lateMinutes && att.lateMinutes > 0 ? (
+                              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                {att.lateMinutes}m
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* Pulang Cepat (Early Minutes) */}
+                          <TableCell className="text-center">
+                            {att.earlyMinutes && att.earlyMinutes > 0 ? (
+                              <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                {att.earlyMinutes}m
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </TableCell>
 
                           {/* Lokasi */}

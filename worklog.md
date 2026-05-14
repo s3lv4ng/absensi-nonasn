@@ -297,3 +297,29 @@ Stage Summary:
 - Pegawai Monitor Total Pegawai bar is now fixed at the bottom of the viewport, not floating in the middle of the list
 - Default items per page changed from 20 to 10 for better usability
 - All lint checks pass, dev server compiles without errors
+
+---
+Task ID: 2
+Agent: Main
+Task: Fix Laporan Pegawai, Add Pulang Lebih Awal feature, Add Terlambat/Pulang Cepat in minutes to Admin monitoring, Update reports
+
+Work Log:
+- Updated types/index.ts to add 'PULANG_CEPAT' to AttendanceStatus and add lateMinutes/earlyMinutes fields to Attendance, EmployeeDailyRecord, EmployeeReportData, EmployeeMonitorEntry interfaces
+- Updated /api/attendance POST to detect PULANG_CEPAT when clock-out time is before shift endTime, calculates earlyMinutes, stores info in note field
+- Updated /api/attendance GET to include lateMinutes and earlyMinutes calculations for each attendance record based on shift times
+- Updated /api/attendance/monitor to fetch shift data and calculate lateMinutes/earlyMinutes per employee, added pulangCepat count to summary
+- Updated /api/reports to include pulangCepat, totalLateMinutes, totalEarlyMinutes in employee summaries, added PULANG attendance analysis for early departure detection
+- Updated /api/employee-report to calculate lateMinutes and earlyMinutes per day, added pulangCepat, totalLateMinutes, totalEarlyMinutes to summary
+- Updated AdminReports component: added 4th overview stat card (Pulang Cepat), added Telat (menit), P. Cepat (kali), P. Cepat (menit) columns to table
+- Updated AttendanceMonitoring component: added Terlambat and P. Cepat columns to desktop table, added late/early badges to mobile cards, added PULANG_CEPAT to status filter and statusColor
+- Updated EmployeeReport component: added Pulang Cepat and Tot. Telat summary cards, added Terlambat and P. Cepat columns to daily table, added PULANG_CEPAT to statusLabel/statusBadgeClass
+- Updated EmployeeDashboard: shows "Pulang Cepat" badge when PULANG status is PULANG_CEPAT, toast shows minutes for both late and early
+- Updated EmployeeMonitoring: added PULANG_CEPAT to statusConfig
+
+Stage Summary:
+- Laporan Pegawai on Admin now displays data with Pulang Cepat columns and late/early minutes
+- Pulang Lebih Awal feature: when absen pulang before shift endTime, status is set to PULANG_CEPAT with minutes calculated
+- Admin monitoring shows Terlambat (minutes) and Pulang Cepat (minutes) columns
+- Reports include pulangCepat count, totalLateMinutes, totalEarlyMinutes per employee
+- Employee report shows late/early minutes per day in the daily table
+- All lint checks pass, dev server running without errors

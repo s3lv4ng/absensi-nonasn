@@ -122,6 +122,12 @@ const statusConfig: Record<
     bgColor: 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700',
     icon: Clock,
   },
+  PULANG_CEPAT: {
+    label: 'Pulang Cepat',
+    color: 'text-orange-700 dark:text-orange-300',
+    bgColor: 'bg-orange-100 dark:bg-orange-900/40 border-orange-200 dark:border-orange-800',
+    icon: LogOut,
+  },
 }
 
 // ---------------------------------------------------------------------------

@@ -135,8 +135,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Determine shift end time for PULANG_CEPAT detection
+    let shiftEndTime: string | null = null
+    if (userWithShift?.shift && userWithShift.shift.isActive) {
+      shiftEndTime = userWithShift.shift.endTime
+    } else {
+      const officeSettingFallback = await db.officeSetting.findFirst()
+      shiftEndTime = officeSettingFallback?.endTime || null
+    }
+
     // Determine status based on user's assigned shift
     let attendanceStatus = status || 'HADIR'
+    let lateMinutes: number | null = null
+    let earlyMinutes: number | null = null
+
     if (type === 'MASUK') {
       const now = new Date()
       const [hours, minutes] = shiftStartTime.split(':').map(Number)
@@ -145,6 +157,24 @@ export async function POST(request: NextRequest) {
 
       if (now > startTime) {
         attendanceStatus = 'TELAT'
+        // Calculate minutes late
+        const diffMs = now.getTime() - startTime.getTime()
+        lateMinutes = Math.ceil(diffMs / 60000)
+      }
+    } else if (type === 'PULANG') {
+      // Check for PULANG_CEPAT (leaving before shift endTime)
+      if (shiftEndTime) {
+        const now = new Date()
+        const [endHours, endMinutes] = shiftEndTime.split(':').map(Number)
+        const endTime = new Date(now)
+        endTime.setHours(endHours, endMinutes, 0, 0)
+
+        if (now < endTime) {
+          attendanceStatus = 'PULANG_CEPAT'
+          // Calculate minutes early
+          const diffMs = endTime.getTime() - now.getTime()
+          earlyMinutes = Math.ceil(diffMs / 60000)
+        }
       }
     }
 
@@ -158,6 +188,10 @@ export async function POST(request: NextRequest) {
         confidence: confidence || 0,
         status: attendanceStatus,
         shiftId: shiftId,
+        note: [
+          lateMinutes ? `Terlambat ${lateMinutes} menit` : '',
+          earlyMinutes ? `Pulang cepat ${earlyMinutes} menit` : '',
+        ].filter(Boolean).join(' | ') || null,
       },
     })
 
@@ -165,6 +199,8 @@ export async function POST(request: NextRequest) {
       message: `Absensi ${type.toLowerCase()} berhasil`,
       attendance,
       distance: Math.round(distance),
+      lateMinutes,
+      earlyMinutes,
     }, { status: 201 })
   } catch (error) {
     console.error('Attendance POST error:', error)
@@ -233,6 +269,7 @@ export async function GET(request: NextRequest) {
                   name: true,
                   startTime: true,
                   endTime: true,
+                  lateTolerance: true,
                   color: true,
                 },
               },
@@ -244,6 +281,7 @@ export async function GET(request: NextRequest) {
               name: true,
               startTime: true,
               endTime: true,
+              lateTolerance: true,
               color: true,
             },
           },
@@ -255,8 +293,68 @@ export async function GET(request: NextRequest) {
       db.attendance.count({ where }),
     ])
 
+    // Calculate lateMinutes and earlyMinutes for each attendance
+    const attendancesWithCalculations = attendances.map((att) => {
+      let lateMinutes: number | null = null
+      let earlyMinutes: number | null = null
+
+      // Get the shift info: from the attendance's shift, the user's shift, or fallback
+      const shiftData = att.shift || att.user?.shift || null
+
+      if (shiftData) {
+        const attDate = new Date(att.createdAt)
+
+        if (att.type === 'MASUK' && att.status === 'TELAT') {
+          // Calculate minutes late: compare attendance time against shift start + tolerance
+          const [startH, startM] = shiftData.startTime.split(':').map(Number)
+          const shiftStart = new Date(attDate)
+          shiftStart.setHours(startH, startM + (shiftData.lateTolerance || 0), 0, 0)
+          const diffMs = attDate.getTime() - shiftStart.getTime()
+          if (diffMs > 0) {
+            lateMinutes = Math.ceil(diffMs / 60000)
+          }
+        } else if (att.type === 'MASUK' && att.status === 'HADIR') {
+          // Even if not late, check if they arrived after the shift start time
+          const [startH, startM] = shiftData.startTime.split(':').map(Number)
+          const shiftStart = new Date(attDate)
+          shiftStart.setHours(startH, startM, 0, 0)
+          const diffMs = attDate.getTime() - shiftStart.getTime()
+          if (diffMs > 0) {
+            lateMinutes = Math.ceil(diffMs / 60000)
+          }
+        }
+
+        if (att.type === 'PULANG') {
+          // Check for early departure
+          const [endH, endM] = shiftData.endTime.split(':').map(Number)
+          const shiftEnd = new Date(attDate)
+          shiftEnd.setHours(endH, endM, 0, 0)
+          const diffMs = shiftEnd.getTime() - attDate.getTime()
+          if (diffMs > 0) {
+            earlyMinutes = Math.ceil(diffMs / 60000)
+          }
+        }
+      }
+
+      // Also try to parse from the note field if no shift data
+      if (!lateMinutes && att.note) {
+        const lateMatch = att.note.match(/Terlambat\s+(\d+)\s+menit/)
+        if (lateMatch) lateMinutes = parseInt(lateMatch[1])
+      }
+      if (!earlyMinutes && att.note) {
+        const earlyMatch = att.note.match(/Pulang cepat\s+(\d+)\s+menit/)
+        if (earlyMatch) earlyMinutes = parseInt(earlyMatch[1])
+      }
+
+      return {
+        ...att,
+        lateMinutes,
+        earlyMinutes,
+      }
+    })
+
     return NextResponse.json({
-      attendances,
+      attendances: attendancesWithCalculations,
       total,
       page,
       totalPages: Math.ceil(total / limit),
