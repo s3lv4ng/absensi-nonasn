@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  nip           String   @unique
+  nama          String
+  email         String   @unique
+  password      String
+  role          String   @default("PEGAWAI") // ADMIN | PEGAWAI
+  photo         String?
+  faceDescriptor String?  // JSON string of face embedding vector
+  unitKerja     String?
+  jabatan       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendances   Attendance[]
+  leaveRequests LeaveRequest[]
+}
+
+model Attendance {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // MASUK | PULANG
+  latitude    Float
+  longitude   Float
+  photo       String?  // Base64 or URL of captured photo
+  confidence  Float    @default(0) // Face matching confidence score
+  status      String   @default("HADIR") // HADIR | TELAT | IZIN | CUTI | ALPHA
+  note        String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model OfficeSetting {
+  id          String   @id @default(cuid())
+  officeName  String   @default("Kantor Pusat")
+  latitude    Float    @default(-6.2088)
+  longitude   Float    @default(106.8456)
+  radiusMeter Int      @default(100)
+  startTime   String   @default("08:00") // Jam masuk
+  endTime     String   @default("17:00") // Jam pulang
+  lateTolerance Int    @default(15) // Toleransi keterlambatan (menit)
+  workDays    String   @default("1,2,3,4,5") // Senin-Jumat (0=Minggu)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  name        String
+  date        DateTime
+  type        String   @default("NASIONAL") // NASIONAL | KEAGAMAAN | KHUSUS
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([date])
+}
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // IZIN | CUTI | SAKIT
+  startDate   DateTime
+  endDate     DateTime
+  reason      String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
