@@ -33,6 +33,7 @@ import {
   Briefcase,
   Mail,
   Hash,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { User } from '@/types'
@@ -292,16 +293,30 @@ export function Profile() {
                     </Badge>
                   )}
                 </div>
-                <Button
-                  onClick={() => setShowFaceRegister(true)}
-                  className="mt-3 w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
-                  size="sm"
-                >
-                  <ScanFace className="mr-2 h-4 w-4" />
-                  {user?.faceDescriptor
-                    ? 'Daftarkan Ulang Wajah'
-                    : 'Daftarkan Wajah'}
-                </Button>
+                {user?.faceDescriptor && user?.faceRegisteredAt && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Terdaftar pada: {new Date(user.faceRegisteredAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+                {user?.faceDescriptor ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40">
+                      <AlertTriangle className="h-4 w-4 text-[#1e40af] dark:text-blue-400 mt-0.5 shrink-0" />
+                      <p className="text-xs text-muted-foreground">
+                        Wajah sudah terdaftar. Jika perlu mendaftar ulang, hubungi <strong>Admin</strong> untuk mereset data wajah terlebih dahulu.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => setShowFaceRegister(true)}
+                    className="mt-3 w-full bg-[#1e40af] hover:bg-[#1e3a8a] text-white shadow-lg shadow-blue-500/25"
+                    size="sm"
+                  >
+                    <ScanFace className="mr-2 h-4 w-4" />
+                    Daftarkan Wajah
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

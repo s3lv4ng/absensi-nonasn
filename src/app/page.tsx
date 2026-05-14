@@ -9,6 +9,7 @@ import { EmployeeDashboard } from '@/components/employee/employee-dashboard'
 import { AttendanceHistory } from '@/components/employee/attendance-history'
 import { Profile } from '@/components/employee/profile'
 import { LeaveSubmission } from '@/components/employee/leave-submission'
+import { EmployeeMonitoring } from '@/components/employee/employee-monitoring'
 import { AdminDashboard } from '@/components/admin/admin-dashboard'
 import { EmployeeManagement } from '@/components/admin/employee-management'
 import { AttendanceMonitoring } from '@/components/admin/attendance-monitoring'
@@ -18,6 +19,7 @@ import { LeaveManagement } from '@/components/admin/leave-management'
 import { OfficeManagement } from '@/components/admin/office-management'
 import { ShiftManagement } from '@/components/admin/shift-management'
 import { EmployeeReport } from '@/components/admin/employee-report'
+import { LeaveTypeManagement } from '@/components/admin/leave-type-management'
 
 function ViewRenderer() {
   const { currentView } = useAppStore()
@@ -45,12 +47,16 @@ function ViewRenderer() {
       return <ShiftManagement />
     case 'admin-employee-report':
       return <EmployeeReport />
+    case 'admin-leave-types':
+      return <LeaveTypeManagement />
     case 'employee-dashboard':
       return <EmployeeDashboard />
     case 'employee-history':
       return <AttendanceHistory />
     case 'employee-leaves':
       return <LeaveSubmission />
+    case 'employee-monitoring':
+      return <EmployeeMonitoring />
     case 'employee-profile':
       return <Profile />
     default:

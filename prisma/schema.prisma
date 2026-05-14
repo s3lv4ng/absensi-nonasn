@@ -16,6 +16,7 @@ model User {
   role          String   @default("PEGAWAI") // ADMIN | PEGAWAI
   photo         String?
   faceDescriptor String?  // JSON string of face embedding vector
+  faceRegisteredAt DateTime? // When face was registered
   unitKerja     String?
   jabatan       String?
   shiftId       String?   // Assigned work shift
@@ -105,7 +106,7 @@ model Holiday {
 model LeaveRequest {
   id          String   @id @default(cuid())
   userId      String
-  type        String   // IZIN | CUTI | SAKIT | DINAS
+  type        String   // IZIN | CUTI | SAKIT | DINAS or custom code from LeaveTypeCategory
   startDate   DateTime
   endDate     DateTime
   reason      String
@@ -120,4 +121,15 @@ model LeaveRequest {
 
   @@index([userId])
   @@index([status])
+}
+
+model LeaveTypeCategory {
+  id          String   @id @default(cuid())
+  name        String   // Display name e.g. "Cuti Tahunan", "Izin Pribadi", "Dinas Luar"
+  code        String   @unique // Unique code e.g. "CUTI_TAHUNAN", "IZIN_PRIBADI", "DINAS_LUAR"
+  description String?  // Optional description
+  color       String   @default("#1e40af") // Display color
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

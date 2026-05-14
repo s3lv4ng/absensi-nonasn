@@ -107,7 +107,7 @@ function formatDateLong(iso: string) {
   })
 }
 
-function typeBadgeClass(type: LeaveType): string {
+function typeBadgeClass(type: string): string {
   switch (type) {
     case 'IZIN':
       return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800'
@@ -118,17 +118,17 @@ function typeBadgeClass(type: LeaveType): string {
     case 'DINAS':
       return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
     default:
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-800/40 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+      return 'bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300 border-slate-200 dark:border-slate-700'
   }
 }
 
-function typeLabel(type: LeaveType): string {
+function typeLabel(type: string): string {
   switch (type) {
     case 'IZIN': return 'Izin'
     case 'CUTI': return 'Cuti'
     case 'SAKIT': return 'Sakit'
     case 'DINAS': return 'Dinas'
-    default: return type
+    default: return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 }
 
@@ -302,8 +302,8 @@ function LeaveTable({
 
                 {/* Tipe */}
                 <TableCell>
-                  <Badge variant="outline" className={`text-[10px] px-2 py-0 ${typeBadgeClass(leave.type as LeaveType)}`}>
-                    {typeLabel(leave.type as LeaveType)}
+                  <Badge variant="outline" className={`text-[10px] px-2 py-0 ${typeBadgeClass(leave.type as string)}`}>
+                    {typeLabel(leave.type as string)}
                   </Badge>
                 </TableCell>
 
@@ -445,7 +445,7 @@ function LeaveDetailDialog({
             Detail Pengajuan
           </DialogTitle>
           <DialogDescription>
-            Informasi lengkap pengajuan {typeLabel(leave.type as LeaveType).toLowerCase()}
+            Informasi lengkap pengajuan {typeLabel(leave.type as string).toLowerCase()}
           </DialogDescription>
         </DialogHeader>
 
@@ -475,8 +475,8 @@ function LeaveDetailDialog({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Tipe Pengajuan</p>
-              <Badge variant="outline" className={`text-xs ${typeBadgeClass(leave.type as LeaveType)}`}>
-                {typeLabel(leave.type as LeaveType)}
+              <Badge variant="outline" className={`text-xs ${typeBadgeClass(leave.type as string)}`}>
+                {typeLabel(leave.type as string)}
               </Badge>
             </div>
             <div>
@@ -582,7 +582,7 @@ function AddManualDialog({
   const [submitting, setSubmitting] = useState(false)
 
   const [userId, setUserId] = useState('')
-  const [type, setType] = useState<LeaveType>('IZIN')
+  const [type, setType] = useState<string>('IZIN')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
@@ -711,7 +711,7 @@ function AddManualDialog({
           {/* Tipe */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Tipe</Label>
-            <Select value={type} onValueChange={(v) => setType(v as LeaveType)}>
+            <Select value={type} onValueChange={setType}>
               <SelectTrigger className="border-blue-200 dark:border-blue-800">
                 <SelectValue />
               </SelectTrigger>
@@ -838,7 +838,7 @@ function EditDialog({
 
   useEffect(() => {
     if (leave && open) {
-      setType(leave.type as LeaveType)
+      setType(leave.type as string)
       // Convert ISO to yyyy-MM-dd for the date input
       const sd = new Date(leave.startDate)
       setStartDate(sd.toISOString().split('T')[0])
@@ -901,7 +901,7 @@ function EditDialog({
             Edit Pengajuan
           </DialogTitle>
           <DialogDescription>
-            Perbarui data pengajuan {leave ? typeLabel(leave.type as LeaveType).toLowerCase() : ''}
+            Perbarui data pengajuan {leave ? typeLabel(leave.type as string).toLowerCase() : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -922,7 +922,7 @@ function EditDialog({
           {/* Tipe */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Tipe</Label>
-            <Select value={type} onValueChange={(v) => setType(v as LeaveType)}>
+            <Select value={type} onValueChange={setType}>
               <SelectTrigger className="border-blue-200 dark:border-blue-800">
                 <SelectValue />
               </SelectTrigger>
@@ -1094,7 +1094,7 @@ export function LeaveManagement() {
           ? 'Pengajuan disetujui'
           : 'Pengajuan ditolak',
         {
-          description: `Pengajuan ${typeLabel(confirmLeave.type as LeaveType).toLowerCase()} dari ${confirmLeave.user?.nama ?? 'pegawai'} telah ${confirmAction === 'APPROVED' ? 'disetujui' : 'ditolak'}.`,
+          description: `Pengajuan ${typeLabel(confirmLeave.type as string).toLowerCase()} dari ${confirmLeave.user?.nama ?? 'pegawai'} telah ${confirmAction === 'APPROVED' ? 'disetujui' : 'ditolak'}.`,
         }
       )
 
@@ -1128,7 +1128,7 @@ export function LeaveManagement() {
       }
 
       toast.success('Data berhasil dihapus', {
-        description: `Pengajuan ${typeLabel(deleteLeave.type as LeaveType).toLowerCase()} dari ${deleteLeave.user?.nama ?? 'pegawai'} telah dihapus.`,
+        description: `Pengajuan ${typeLabel(deleteLeave.type as string).toLowerCase()} dari ${deleteLeave.user?.nama ?? 'pegawai'} telah dihapus.`,
       })
 
       await fetchLeaves()
@@ -1331,7 +1331,7 @@ export function LeaveManagement() {
               {confirmLeave && (
                 <span>
                   Apakah Anda yakin ingin {confirmAction === 'APPROVED' ? 'menyetujui' : 'menolak'} pengajuan{' '}
-                  <strong>{typeLabel(confirmLeave.type as LeaveType).toLowerCase()}</strong> dari{' '}
+                  <strong>{typeLabel(confirmLeave.type as string).toLowerCase()}</strong> dari{' '}
                   <strong>{confirmLeave.user?.nama ?? 'pegawai'}</strong> pada tanggal{' '}
                   {formatDate(confirmLeave.startDate)} &ndash; {formatDate(confirmLeave.endDate)}?
                 </span>
@@ -1368,7 +1368,7 @@ export function LeaveManagement() {
               {deleteLeave && (
                 <span>
                   Apakah Anda yakin ingin menghapus pengajuan{' '}
-                  <strong>{typeLabel(deleteLeave.type as LeaveType).toLowerCase()}</strong> dari{' '}
+                  <strong>{typeLabel(deleteLeave.type as string).toLowerCase()}</strong> dari{' '}
                   <strong>{deleteLeave.user?.nama ?? 'pegawai'}</strong> pada tanggal{' '}
                   {formatDate(deleteLeave.startDate)} &ndash; {formatDate(deleteLeave.endDate)}?
                   <br />

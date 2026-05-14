@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   History,
   UserCircle,
+  Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,11 @@ const employeeNavItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
+    title: 'Monitor',
+    view: 'employee-monitoring',
+    icon: Eye,
+  },
+  {
     title: 'Absensi',
     view: 'employee-dashboard', // Will trigger the attendance dialog
     icon: Fingerprint,
@@ -32,11 +38,6 @@ const employeeNavItems: NavItem[] = [
     title: 'Pengajuan',
     view: 'employee-leaves',
     icon: ClipboardCheck,
-  },
-  {
-    title: 'Riwayat',
-    view: 'employee-history',
-    icon: History,
   },
   {
     title: 'Profil',
@@ -72,7 +73,6 @@ const adminNavItems: NavItem[] = [
     icon: UserCircle,
   },
 ]
-
 export function MobileNavbar() {
   const { user, hasRole } = useAuthStore()
   const { currentView, setCurrentView } = useAppStore()

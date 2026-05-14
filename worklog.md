@@ -1,57 +1,27 @@
 ---
 Task ID: 1
 Agent: Main
-Task: Fix face recognition - implement real face detection and matching with proper rules
+Task: Add Tipe Cuti/Izin, Employee Monitoring, and Face Registration Once-Only
 
 Work Log:
-- Analyzed current face recognition code - found ALL face matching was fake (random descriptors, random confidence 0.85-0.99)
-- Installed `@vladmandic/face-api` (maintained fork of face-api.js)
-- Copied AI model files to `public/models/` directory (tiny_face_detector, face_landmark_68, face_recognition)
-- Created `src/lib/face-recognition.ts` - comprehensive face recognition utility with:
-  - Dynamic imports for face-api.js (client-side only, avoids SSR TextEncoder errors)
-  - Model loading with singleton pattern
-  - `detectFace()` - detects single face and computes 128-dim descriptor
-  - `checkFaceDetected()` - lightweight face detection for live camera preview
-  - `generateFaceDescriptor()` - for face registration
-  - `verifyFace()` - compares captured face against stored descriptor
-  - `compareFaces()` - Euclidean distance comparison with thresholds
-  - Face matching rules:
-    * distance < 0.40 → Sangat Cocok (Very Strong Match)
-    * distance < 0.50 → Cocok (Good Match)
-    * distance < 0.60 → Cukup Cocok (Fair Match, still accepted)
-    * distance >= 0.60 → Tidak Cocok (REJECTED)
-  - Confidence = max(0, 1 - distance)
-- Fixed camera black screen issue in `useCamera` hook:
-  - Added `isReady` state tracking when video is actually playing
-  - Fixed stream attachment race conditions
-  - Added proper muted/playsInline attributes before play()
-  - Added video event listeners (canplay, playing)
-- Updated `face-register.tsx`:
-  - Replaced random descriptor generation with real `generateFaceDescriptor()` using face-api.js
-  - Added live face detection in camera preview (oval turns green when face detected)
-  - Ambil Foto button disabled until face is detected
-  - Shows model loading progress bar
-- Updated `camera-view.tsx`:
-  - Replaced random confidence with real `verifyFace()` matching
-  - New verification flow: capture → verify → match/reject
-  - Shows AI Match badge when stored descriptor is available
-  - Green verified / Red rejected states with distance and confidence
-  - Face must match stored descriptor (distance < 0.6) to pass
-  - If no stored descriptor, only checks face is present (moderate confidence)
-- Updated `employee-dashboard.tsx`:
-  - Fetches user's stored face descriptor on mount
-  - Passes `storedFaceDescriptor` to CameraView
-  - `faceVerified` flag required for submission
-  - Shows warning if user has not registered face data
-  - Checklist shows face verification status (verified/failed)
-- Added GET endpoint to `/api/users/face` for fetching user's face descriptor
-- Updated attendance API to check `faceVerified` flag
-- All lint checks pass
-- Dev server compiles and returns 200
+- Updated Prisma schema: added LeaveTypeCategory model (name, code, description, color, isActive) and faceRegisteredAt field to User
+- Ran `bun run db:push` to sync database
+- Created `/api/leave-types` API route with full CRUD (GET, POST, PUT, DELETE) for LeaveTypeCategory
+- Created `/api/attendance/monitor` API route that returns today's attendance/leave status for ALL employees
+- Updated `/api/users/face` PUT endpoint to enforce once-only face registration (non-admin gets 400 if already registered)
+- Updated `/api/users/face` DELETE endpoint to also clear faceRegisteredAt on admin reset
+- Updated TypeScript types: added LeaveTypeCategory, EmployeeMonitorEntry interfaces, added 'employee-monitoring' and 'admin-leave-types' to AppView, added faceRegisteredAt to User
+- Created LeaveTypeManagement admin component with full CRUD for custom leave types
+- Created EmployeeMonitoring employee component showing all colleagues' attendance/leave status with auto-refresh
+- Updated LeaveSubmission employee component to support dynamic leave types from API (default + custom)
+- Updated LeaveManagement admin component to use string-based type functions for custom type support
+- Updated Profile component: if face already registered, shows info message that admin must reset; only shows "Daftarkan Wajah" button if not registered
+- Updated ViewRenderer in page.tsx to include new views
+- Updated sidebar with 'Tipe Cuti/Izin' (admin) and 'Monitor Kehadiran' (employee) nav items
+- Updated mobile navbar with 'Monitor' item for employees
+- All code passes lint check and compiles successfully
 
 Stage Summary:
-- Face recognition is now REAL using face-api.js with AI-powered face descriptors
-- Camera black screen fixed with proper video element handling
-- Face matching rules properly implemented with distance thresholds
-- Faces that do not match are REJECTED (distance >= 0.6)
-- Only matching faces (distance < 0.6) can submit attendance
+- 3 major features implemented: (1) Custom Leave Type CRUD, (2) Employee Monitoring of colleagues, (3) Once-only face registration with admin reset
+- Key files created: leave-type-management.tsx, employee-monitoring.tsx, /api/leave-types/route.ts, /api/attendance/monitor/route.ts
+- Key files modified: schema.prisma, face/route.ts, profile.tsx, leave-submission.tsx, leave-management.tsx, page.tsx, sidebar.tsx, mobile-navbar.tsx, types/index.ts

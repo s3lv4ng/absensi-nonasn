@@ -57,7 +57,8 @@ import {
 import { toast } from 'sonner'
 import type { LeaveRequest, LeaveType, LeaveStatus } from '@/types'
 
-const leaveTypeConfig: Record<LeaveType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string; desc: string }> = {
+// Default leave type config for the 4 built-in types
+const defaultLeaveTypeConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string; desc: string }> = {
   IZIN: {
     label: 'Izin',
     icon: FileText,
@@ -86,6 +87,41 @@ const leaveTypeConfig: Record<LeaveType, { label: string; icon: React.ComponentT
     bgColor: 'bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800',
     desc: 'Perjalanan dinas luar kantor',
   },
+}
+
+// Helper to get config for any leave type (default or custom)
+function getLeaveTypeConfig(typeCode: string, customTypes: LeaveTypeCategory[]) {
+  if (defaultLeaveTypeConfig[typeCode]) {
+    return defaultLeaveTypeConfig[typeCode]
+  }
+  // Look for custom type
+  const custom = customTypes.find(t => t.code === typeCode)
+  if (custom) {
+    return {
+      label: custom.name,
+      icon: FileText,
+      color: 'text-slate-700 dark:text-slate-300',
+      bgColor: 'bg-slate-100 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700',
+      desc: custom.description || '',
+    }
+  }
+  // Fallback
+  return {
+    label: typeCode,
+    icon: FileText,
+    color: 'text-gray-700 dark:text-gray-300',
+    bgColor: 'bg-gray-100 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700',
+    desc: '',
+  }
+}
+
+interface LeaveTypeCategory {
+  id: string
+  name: string
+  code: string
+  description: string | null
+  color: string
+  isActive: boolean
 }
 
 const statusConfig: Record<LeaveStatus, { label: string; color: string; bgColor: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -120,9 +156,10 @@ export function LeaveSubmission() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('ALL')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [customLeaveTypes, setCustomLeaveTypes] = useState<LeaveTypeCategory[]>([])
 
   // New leave form state
-  const [formType, setFormType] = useState<LeaveType>('IZIN')
+  const [formType, setFormType] = useState<string>('IZIN')
   const [formStartDate, setFormStartDate] = useState('')
   const [formEndDate, setFormEndDate] = useState('')
   const [formReason, setFormReason] = useState('')
@@ -157,9 +194,22 @@ export function LeaveSubmission() {
     }
   }, [])
 
+  const fetchCustomLeaveTypes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/leave-types')
+      if (res.ok) {
+        const data = await res.json()
+        setCustomLeaveTypes(data.leaveTypes || [])
+      }
+    } catch {
+      // silently fail
+    }
+  }, [])
+
   useEffect(() => {
     fetchLeaves()
-  }, [fetchLeaves])
+    fetchCustomLeaveTypes()
+  }, [fetchLeaves, fetchCustomLeaveTypes])
 
   const handleSubmit = async () => {
     if (!formType || !formStartDate || !formEndDate || !formReason.trim()) {
@@ -430,7 +480,7 @@ export function LeaveSubmission() {
         ) : (
           <AnimatePresence>
             {filteredLeaves.map((leave) => {
-              const typeConf = leaveTypeConfig[leave.type as LeaveType] || leaveTypeConfig.IZIN
+              const typeConf = getLeaveTypeConfig(leave.type, customLeaveTypes)
               const statusConf = statusConfig[leave.status]
               const TypeIcon = typeConf.icon
               const StatusIcon = statusConf.icon
@@ -567,7 +617,8 @@ export function LeaveSubmission() {
                 Jenis Pengajuan
               </Label>
               <div className="grid grid-cols-2 gap-2">
-                {(Object.entries(leaveTypeConfig) as [LeaveType, typeof leaveTypeConfig.IZIN][]).map(([key, conf]) => {
+                {/* Default types */}
+                {(Object.entries(defaultLeaveTypeConfig) as [string, typeof defaultLeaveTypeConfig.IZIN][]).map(([key, conf]) => {
                   const Icon = conf.icon
                   return (
                     <button
@@ -594,6 +645,31 @@ export function LeaveSubmission() {
                     </button>
                   )
                 })}
+                {/* Custom leave types */}
+                {customLeaveTypes.filter(t => t.isActive).map((ct) => (
+                  <button
+                    key={ct.code}
+                    type="button"
+                    onClick={() => setFormType(ct.code)}
+                    className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all text-left ${
+                      formType === ct.code
+                        ? 'border-[#1e40af] bg-blue-50 dark:bg-blue-950/50 shadow-md'
+                        : 'border-blue-100 dark:border-blue-900/30 bg-white/60 dark:bg-gray-900/60 hover:border-blue-200 dark:hover:border-blue-800'
+                    }`}
+                  >
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700">
+                      <FileText className="size-4" style={{ color: ct.color }} />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-semibold ${formType === ct.code ? 'text-[#1e40af] dark:text-blue-300' : 'text-foreground'}`}>
+                        {ct.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        {ct.description || ct.code}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
 

@@ -14,6 +14,8 @@ import {
   MapPin,
   Clock,
   UserCheck,
+  Tag,
+  Eye,
 } from 'lucide-react'
 import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
@@ -71,6 +73,11 @@ const adminNavItems: NavItem[] = [
     badge: 'Baru',
   },
   {
+    title: 'Tipe Cuti/Izin',
+    view: 'admin-leave-types',
+    icon: Tag,
+  },
+  {
     title: 'Laporan',
     view: 'admin-reports',
     icon: FileBarChart,
@@ -107,6 +114,11 @@ const employeeNavItems: NavItem[] = [
     title: 'Riwayat Absensi',
     view: 'employee-history',
     icon: History,
+  },
+  {
+    title: 'Monitor Kehadiran',
+    view: 'employee-monitoring',
+    icon: Eye,
   },
   {
     title: 'Pengajuan Izin/Cuti',

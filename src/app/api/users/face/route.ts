@@ -55,13 +55,31 @@ export async function PUT(request: NextRequest) {
     const { userId, faceDescriptor, photo } = body
     const targetUserId = userId || authUser.userId
 
+    // Non-admin trying to update someone else's face
     if (targetUserId !== authUser.userId && authUser.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+    }
+
+    // Check if user already has face registered (enforce once-only for non-admin)
+    if (authUser.role !== 'ADMIN') {
+      const existingUser = await db.user.findUnique({
+        where: { id: targetUserId },
+        select: { faceDescriptor: true, faceRegisteredAt: true },
+      })
+
+      if (existingUser?.faceDescriptor && existingUser?.faceRegisteredAt) {
+        return NextResponse.json(
+          { error: 'Wajah sudah terdaftar. Hubungi admin untuk mereset data wajah.' },
+          { status: 400 }
+        )
+      }
     }
 
     const updateData: Record<string, unknown> = {}
     if (faceDescriptor) updateData.faceDescriptor = faceDescriptor
     if (photo) updateData.photo = photo
+    // Set faceRegisteredAt when registering face for the first time
+    updateData.faceRegisteredAt = new Date()
 
     const user = await db.user.update({
       where: { id: targetUserId },
@@ -74,6 +92,7 @@ export async function PUT(request: NextRequest) {
         role: true,
         photo: true,
         faceDescriptor: true,
+        faceRegisteredAt: true,
         unitKerja: true,
         jabatan: true,
         isActive: true,
@@ -87,7 +106,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Reset face descriptor
+// Reset face descriptor (Admin only)
 export async function DELETE(request: NextRequest) {
   try {
     const authUser = await getAuthUser()
@@ -104,10 +123,10 @@ export async function DELETE(request: NextRequest) {
 
     await db.user.update({
       where: { id: userId },
-      data: { faceDescriptor: null, photo: null },
+      data: { faceDescriptor: null, photo: null, faceRegisteredAt: null },
     })
 
-    return NextResponse.json({ message: 'Data wajah berhasil direset' })
+    return NextResponse.json({ message: 'Data wajah berhasil direset. Pegawai dapat mendaftarkan ulang wajah.' })
   } catch (error) {
     console.error('Face reset error:', error)
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })

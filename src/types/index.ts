@@ -6,7 +6,7 @@ export type AttendanceStatus = 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'ALPHA' | '
 
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-export type LeaveType = 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS'
+export type LeaveType = 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS' // Default types, can be extended with LeaveTypeCategory
 
 export type HolidayType = 'NASIONAL' | 'KEAGAMAAN' | 'KHUSUS'
 
@@ -18,6 +18,7 @@ export type AppView =
   | 'employee-history'
   | 'employee-profile'
   | 'employee-leaves'
+  | 'employee-monitoring'
   | 'admin-dashboard'
   | 'admin-employees'
   | 'admin-attendance'
@@ -27,6 +28,7 @@ export type AppView =
   | 'admin-offices'
   | 'admin-shifts'
   | 'admin-employee-report'
+  | 'admin-leave-types'
 
 export interface User {
   id: string
@@ -36,6 +38,7 @@ export interface User {
   role: Role
   photo: string | null
   faceDescriptor: string | null
+  faceRegisteredAt: string | null
   unitKerja: string | null
   jabatan: string | null
   shiftId: string | null
@@ -199,4 +202,29 @@ export interface EmployeeReportData {
   }
   month: number
   year: number
+}
+
+export interface LeaveTypeCategory {
+  id: string
+  name: string
+  code: string
+  description: string | null
+  color: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface EmployeeMonitorEntry {
+  userId: string
+  nama: string
+  nip: string
+  photo: string | null
+  unitKerja: string | null
+  jabatan: string | null
+  status: 'HADIR' | 'TELAT' | 'IZIN' | 'CUTI' | 'SAKIT' | 'DINAS' | 'ALPHA' | 'BELUM_ABSEN'
+  masukTime: string | null
+  pulangTime: string | null
+  leaveType: string | null
+  leaveStatus: string | null
 }
