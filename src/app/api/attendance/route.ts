@@ -10,11 +10,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { type, latitude, longitude, photo, confidence, status, officeId } = body
+    const { type, latitude, longitude, photo, confidence, status, officeId, faceVerified } = body
 
     if (!type || latitude === undefined || longitude === undefined) {
       return NextResponse.json(
         { error: 'Type, latitude, dan longitude wajib diisi' },
+        { status: 400 }
+      )
+    }
+
+    // Check face verification flag
+    if (faceVerified === false) {
+      return NextResponse.json(
+        { error: 'Verifikasi wajah gagal. Wajah tidak cocok dengan data yang terdaftar.' },
         { status: 400 }
       )
     }
@@ -24,6 +32,14 @@ export async function POST(request: NextRequest) {
       where: { id: authUser.userId },
       include: { shift: true },
     })
+
+    // Check if user has registered face data
+    if (userWithShift && !userWithShift.faceDescriptor && faceVerified !== true) {
+      return NextResponse.json(
+        { error: 'Data wajah belum terdaftar. Silakan daftarkan wajah Anda terlebih dahulu.' },
+        { status: 400 }
+      )
+    }
 
     // Get office location for validation - prefer selected office, fallback to OfficeSetting
     let officeLat: number

@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useCamera } from '@/hooks'
+import { loadFaceModels, generateFaceDescriptor, areModelsLoaded, checkFaceDetected } from '@/lib/face-recognition'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
 import {
   Camera,
   CameraOff,
@@ -17,6 +19,7 @@ import {
   ScanFace,
   Save,
   Fingerprint,
+  XCircle,
 } from 'lucide-react'
 
 interface FaceRegisterProps {
@@ -24,13 +27,14 @@ interface FaceRegisterProps {
   onRegistered?: () => void
 }
 
-type RegistrationStatus = 'idle' | 'camera' | 'captured' | 'registering' | 'success' | 'error'
+type RegistrationStatus = 'idle' | 'loading-models' | 'camera' | 'captured' | 'detecting' | 'registering' | 'success' | 'error'
 
 export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
   const {
     videoRef,
     canvasRef,
     isActive,
+    isReady,
     error: cameraError,
     capturedPhoto,
     startCamera,
@@ -42,43 +46,110 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
   const [status, setStatus] = useState<RegistrationStatus>('idle')
   const [apiError, setApiError] = useState<string | null>(null)
   const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null)
+  const [faceDetected, setFaceDetected] = useState(false)
+  const [modelsReady, setModelsReady] = useState(() => areModelsLoaded())
+  const [modelsProgress, setModelsProgress] = useState(0)
+  const photoImgRef = useRef<HTMLImageElement>(null)
+  const faceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Load face-api models on mount if not already loaded
+  useEffect(() => {
+    if (areModelsLoaded()) return
+
+    let cancelled = false
+    const loadModels = async () => {
+      try {
+        setModelsProgress(20)
+        await loadFaceModels()
+        if (!cancelled) {
+          setModelsProgress(100)
+          setModelsReady(true)
+        }
+      } catch (err) {
+        console.error('Failed to load face models:', err)
+        if (!cancelled) {
+          setApiError('Gagal memuat model pengenalan wajah. Pastikan koneksi internet stabil.')
+          setModelsProgress(0)
+        }
+      }
+    }
+
+    loadModels()
+    return () => { cancelled = true }
+  }, [])
+
+  // Periodically check for face in camera feed
+  useEffect(() => {
+    if (isActive && isReady && modelsReady && !capturedPhoto) {
+      faceCheckIntervalRef.current = setInterval(async () => {
+        if (videoRef.current && videoRef.current.readyState >= 2) {
+          const result = await checkFaceDetected(videoRef.current)
+          setFaceDetected(result.detected)
+        }
+      }, 500) // Check every 500ms
+    }
+
+    return () => {
+      if (faceCheckIntervalRef.current) {
+        clearInterval(faceCheckIntervalRef.current)
+        faceCheckIntervalRef.current = null
+      }
+    }
+  }, [isActive, isReady, modelsReady, capturedPhoto, videoRef])
 
   // Cleanup camera on unmount
   useEffect(() => {
     return () => {
       stopCamera()
+      if (faceCheckIntervalRef.current) {
+        clearInterval(faceCheckIntervalRef.current)
+      }
     }
   }, [stopCamera])
-
-  const generateFaceDescriptor = useCallback((): number[] => {
-    // Simulate a 128-dimensional face descriptor (like face-api.js)
-    const descriptor: number[] = []
-    for (let i = 0; i < 128; i++) {
-      descriptor.push(parseFloat((Math.random() * 2 - 1).toFixed(6)))
-    }
-    return descriptor
-  }, [])
 
   const handleStartCamera = useCallback(async () => {
     setApiError(null)
     setCapturedPhoto(null)
     setFaceDescriptor(null)
+    setFaceDetected(false)
+
+    if (!modelsReady) {
+      setStatus('loading-models')
+      try {
+        setModelsProgress(40)
+        await loadFaceModels()
+        setModelsProgress(100)
+        setModelsReady(true)
+      } catch {
+        setApiError('Gagal memuat model pengenalan wajah.')
+        setStatus('error')
+        return
+      }
+    }
+
     setStatus('camera')
     await startCamera()
-  }, [startCamera, setCapturedPhoto])
+  }, [startCamera, setCapturedPhoto, modelsReady])
 
   const handleCapture = useCallback(() => {
+    if (!faceDetected) {
+      setApiError('Wajah tidak terdeteksi. Pastikan wajah terlihat jelas di kamera.')
+      return
+    }
+
     const photo = capturePhoto()
     if (photo) {
       stopCamera()
       setStatus('captured')
+      setFaceDetected(false)
     }
-  }, [capturePhoto, stopCamera])
+  }, [capturePhoto, stopCamera, faceDetected])
 
   const handleRetake = useCallback(async () => {
     setCapturedPhoto(null)
     setFaceDescriptor(null)
     setApiError(null)
+    setFaceDetected(false)
     setStatus('camera')
     await startCamera()
   }, [startCamera, setCapturedPhoto])
@@ -86,14 +157,35 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
   const handleRegister = useCallback(async () => {
     if (!capturedPhoto) return
 
-    setStatus('registering')
+    setStatus('detecting')
     setApiError(null)
 
-    // Generate the face descriptor
-    const descriptor = generateFaceDescriptor()
-    setFaceDescriptor(descriptor)
-
     try {
+      // Create an image element from the captured photo to compute descriptor
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error('Gagal memuat gambar'))
+        img.src = capturedPhoto
+      })
+
+      // Compute real face descriptor using face-api.js
+      const result = await generateFaceDescriptor(img)
+
+      if (!result) {
+        setApiError('Wajah tidak terdeteksi dalam foto. Pastikan wajah terlihat jelas dan pencahayaan cukup. Silakan ambil ulang foto.')
+        setStatus('error')
+        return
+      }
+
+      const descriptor = result.descriptor
+      setFaceDescriptor(descriptor)
+
+      // Now save to server
+      setStatus('registering')
+
       const response = await fetch('/api/users/face', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -117,7 +209,7 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
       )
       setStatus('error')
     }
-  }, [capturedPhoto, userId, generateFaceDescriptor, onRegistered])
+  }, [capturedPhoto, userId, onRegistered])
 
   const getStepStatus = (step: number) => {
     if (status === 'success') return 'complete'
@@ -127,8 +219,10 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
     }
     const stepMap: Record<RegistrationStatus, number> = {
       idle: 0,
+      'loading-models': 0,
       camera: 1,
       captured: 2,
+      detecting: 3,
       registering: 3,
       success: 3,
       error: 3,
@@ -157,6 +251,24 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
               </p>
             </div>
           </div>
+
+          {/* Models loading progress */}
+          {status === 'loading-models' && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 dark:border-blue-800 dark:bg-blue-950/40">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                    Memuat model AI...
+                  </p>
+                  <p className="text-xs text-blue-600/60 dark:text-blue-400/60">
+                    Model pengenalan wajah sedang diunduh
+                  </p>
+                  <Progress value={modelsProgress} className="mt-2 h-2" />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Steps Indicator */}
           <div className="flex items-center gap-2">
@@ -216,13 +328,30 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
 
           {/* Instruction */}
           {status === 'camera' && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 dark:border-blue-800 dark:bg-blue-950/40">
-              <p className="text-center text-sm font-medium text-blue-700 dark:text-blue-300">
-                Posisikan wajah Anda di dalam area oval
-              </p>
-              <p className="mt-1 text-center text-xs text-blue-600/60 dark:text-blue-400/60">
-                Pastikan pencahayaan cukup dan wajah terlihat jelas
-              </p>
+            <div className={`rounded-xl border p-3 ${
+              faceDetected
+                ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/40'
+                : 'border-blue-200 bg-blue-50/80 dark:border-blue-800 dark:bg-blue-950/40'
+            }`}>
+              {faceDetected ? (
+                <>
+                  <p className="text-center text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    ✅ Wajah terdeteksi!
+                  </p>
+                  <p className="mt-1 text-center text-xs text-emerald-600/60 dark:text-emerald-400/60">
+                    Tekan &quot;Ambil Foto&quot; untuk menangkap
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-center text-sm font-medium text-blue-700 dark:text-blue-300">
+                    Posisikan wajah Anda di dalam area oval
+                  </p>
+                  <p className="mt-1 text-center text-xs text-blue-600/60 dark:text-blue-400/60">
+                    Pastikan pencahayaan cukup dan wajah terlihat jelas
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -246,11 +375,12 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
                   ref={videoRef}
                   className="h-full w-full object-cover"
                   playsInline
+                  autoPlay
                   muted
                   style={{ transform: 'scaleX(-1)' }}
                 />
 
-                {/* Face detection oval overlay */}
+                {/* Face detection status overlay */}
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div
                     className="relative"
@@ -259,39 +389,55 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
                       height: '72%',
                     }}
                   >
+                    {/* Oval that changes color based on face detection */}
                     <div
-                      className="absolute inset-0 rounded-[50%] border-2 border-blue-400/70 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+                      className={`absolute inset-0 rounded-[50%] border-2 transition-all duration-300 ${
+                        faceDetected
+                          ? 'border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+                          : 'border-blue-400/70 shadow-[0_0_20px_rgba(59,130,246,0.3)]'
+                      }`}
                       style={{
-                        animation: 'pulse-oval 2s ease-in-out infinite',
+                        animation: faceDetected ? 'none' : 'pulse-oval 2s ease-in-out infinite',
                       }}
                     />
                     {/* Corner brackets */}
-                    <div className="absolute -left-1 -top-1 h-5 w-5 border-l-2 border-t-2 border-blue-400" />
-                    <div className="absolute -right-1 -top-1 h-5 w-5 border-r-2 border-t-2 border-blue-400" />
-                    <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-2 border-l-2 border-blue-400" />
-                    <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-2 border-r-2 border-blue-400" />
+                    <div className={`absolute -left-1 -top-1 h-5 w-5 border-l-2 border-t-2 ${faceDetected ? 'border-emerald-400' : 'border-blue-400'}`} />
+                    <div className={`absolute -right-1 -top-1 h-5 w-5 border-r-2 border-t-2 ${faceDetected ? 'border-emerald-400' : 'border-blue-400'}`} />
+                    <div className={`absolute -bottom-1 -left-1 h-5 w-5 border-b-2 border-l-2 ${faceDetected ? 'border-emerald-400' : 'border-blue-400'}`} />
+                    <div className={`absolute -bottom-1 -right-1 h-5 w-5 border-b-2 border-r-2 ${faceDetected ? 'border-emerald-400' : 'border-blue-400'}`} />
                   </div>
                   {/* Scanning line effect */}
-                  <div
-                    className="absolute left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
-                    style={{
-                      animation: 'scan-line 2.5s ease-in-out infinite',
-                    }}
-                  />
+                  {!faceDetected && (
+                    <div
+                      className="absolute left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
+                      style={{
+                        animation: 'scan-line 2.5s ease-in-out infinite',
+                      }}
+                    />
+                  )}
                 </div>
 
-                {/* Active indicator */}
-                <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                  <span className="text-xs font-medium text-white">LIVE</span>
+                {/* Active indicator + Face status */}
+                <div className="absolute left-3 top-3 flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                    <span className="text-xs font-medium text-white">LIVE</span>
+                  </div>
+                  {faceDetected && (
+                    <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/80 px-2.5 py-1 backdrop-blur-sm">
+                      <CheckCircle2 className="h-3 w-3 text-white" />
+                      <span className="text-xs font-medium text-white">Wajah Terdeteksi</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Captured photo preview */}
-            {capturedPhoto && (status === 'captured' || status === 'registering' || status === 'success' || status === 'error') && (
+            {capturedPhoto && (status === 'captured' || status === 'detecting' || status === 'registering' || status === 'success' || status === 'error') && (
               <div className="relative h-full w-full">
                 <img
+                  ref={photoImgRef}
                   src={capturedPhoto}
                   alt="Foto yang diambil"
                   className="h-full w-full object-cover"
@@ -315,7 +461,7 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
               <div className="flex items-center gap-2">
                 <Fingerprint className="h-4 w-4 text-blue-500" />
                 <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  Face Descriptor (128 dimensi)
+                  Face Descriptor (128 dimensi) — Real AI
                 </p>
               </div>
               <div className="mt-2 max-h-16 overflow-y-auto rounded-lg bg-slate-100 p-2 dark:bg-slate-800">
@@ -327,8 +473,8 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
                 <Badge variant="secondary" className="text-[10px]">
                   128 values
                 </Badge>
-                <Badge variant="outline" className="text-[10px]">
-                  Float32
+                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                  Real Face Embedding
                 </Badge>
               </div>
             </div>
@@ -346,7 +492,7 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
                     Data Wajah Berhasil Disimpan
                   </p>
                   <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
-                    Wajah Anda telah terdaftar dan dapat digunakan untuk verifikasi absensi
+                    Wajah Anda telah terdaftar dengan data AI dan dapat digunakan untuk verifikasi absensi
                   </p>
                 </div>
               </div>
@@ -356,7 +502,7 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
           {/* Error states */}
           {(cameraError || apiError) && (
             <Alert variant="destructive" className="border-red-200 bg-red-50/80 dark:bg-red-950/30">
-              <AlertTriangle className="h-4 w-4" />
+              {apiError ? <XCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
               <AlertDescription className="text-sm">
                 {cameraError || apiError}
               </AlertDescription>
@@ -376,20 +522,33 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
               </Button>
             )}
 
+            {status === 'loading-models' && (
+              <Button disabled className="bg-blue-600" size="lg">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Memuat Model AI...
+              </Button>
+            )}
+
             {status === 'camera' && (
               <>
                 <Button
                   onClick={handleCapture}
-                  className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/25"
+                  disabled={!faceDetected}
+                  className={`shadow-lg ${
+                    faceDetected
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/25'
+                      : 'bg-slate-400 cursor-not-allowed'
+                  }`}
                   size="lg"
                 >
                   <Camera className="mr-2 h-4 w-4" />
-                  Ambil Foto
+                  {faceDetected ? 'Ambil Foto' : 'Menunggu Wajah...'}
                 </Button>
                 <Button
                   onClick={() => {
                     stopCamera()
                     setStatus('idle')
+                    setFaceDetected(false)
                   }}
                   variant="outline"
                   className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/50"
@@ -423,10 +582,10 @@ export function FaceRegister({ userId, onRegistered }: FaceRegisterProps) {
               </>
             )}
 
-            {status === 'registering' && (
+            {(status === 'detecting' || status === 'registering') && (
               <Button disabled className="bg-blue-600" size="lg">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Menyimpan...
+                {status === 'detecting' ? 'Mendeteksi Wajah...' : 'Menyimpan...'}
               </Button>
             )}
 

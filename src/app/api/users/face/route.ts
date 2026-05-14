@@ -2,6 +2,47 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 
+// Get current user's face descriptor
+export async function GET(request: NextRequest) {
+  try {
+    const authUser = await getAuthUser()
+    if (!authUser) {
+      return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+    const targetUserId = userId || authUser.userId
+
+    // Non-admin can only access their own face data
+    if (targetUserId !== authUser.userId && authUser.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        faceDescriptor: true,
+        photo: true,
+      },
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 })
+    }
+
+    return NextResponse.json({
+      faceDescriptor: user.faceDescriptor,
+      hasFaceData: !!user.faceDescriptor,
+      hasPhoto: !!user.photo,
+    })
+  } catch (error) {
+    console.error('Face GET error:', error)
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 })
+  }
+}
+
 // Update face descriptor for a user
 export async function PUT(request: NextRequest) {
   try {

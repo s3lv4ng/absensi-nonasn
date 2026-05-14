@@ -38,6 +38,8 @@ import {
   Fingerprint,
   MapPin,
   Building2,
+  ShieldX,
+  ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Attendance, Office, WorkShift, AttendanceType } from '@/types'
@@ -74,12 +76,14 @@ export function EmployeeDashboard() {
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isLoadingOffices, setIsLoadingOffices] = useState(true)
   const [userShift, setUserShift] = useState<WorkShift | null>(null)
+  const [userFaceDescriptor, setUserFaceDescriptor] = useState<string | null>(null)
 
   // Attendance dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [attendanceType, setAttendanceType] = useState<AttendanceType>('MASUK')
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
   const [capturedConfidence, setCapturedConfidence] = useState<number>(0)
+  const [faceVerified, setFaceVerified] = useState(false)
   const [validatedLocation, setValidatedLocation] = useState<{
     latitude: number
     longitude: number
@@ -182,11 +186,27 @@ export function EmployeeDashboard() {
     }
   }, [])
 
+  // Fetch user's face descriptor
+  const fetchUserFaceData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/users/face')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.faceDescriptor) {
+          setUserFaceDescriptor(data.faceDescriptor)
+        }
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
   useEffect(() => {
     fetchTodayAttendance()
     fetchMonthStats()
     fetchOffices()
-  }, [fetchTodayAttendance, fetchMonthStats, fetchOffices])
+    fetchUserFaceData()
+  }, [fetchTodayAttendance, fetchMonthStats, fetchOffices, fetchUserFaceData])
 
   // Helper to calculate working days so far
   function getWorkingDaysSoFar(year: number, month: number): number {
@@ -210,14 +230,16 @@ export function EmployeeDashboard() {
     setAttendanceType(type)
     setCapturedPhoto(null)
     setCapturedConfidence(0)
+    setFaceVerified(false)
     setValidatedLocation(null)
     setDialogOpen(true)
   }
 
-  const handleCapture = (photo: string, confidence: number) => {
+  const handleCapture = useCallback((photo: string, confidence: number, isVerified: boolean) => {
     setCapturedPhoto(photo)
     setCapturedConfidence(confidence)
-  }
+    setFaceVerified(isVerified)
+  }, [])
 
   const handleLocationValid = useCallback((location: {
     latitude: number
@@ -227,7 +249,6 @@ export function EmployeeDashboard() {
   }, [])
 
   // When office selection changes, update the key to force LocationValidator remount
-  // and auto-validate for the new office
   const handleOfficeChange = useCallback((officeId: string) => {
     setSelectedOfficeId(officeId)
     setValidatedLocation(null)
@@ -242,10 +263,16 @@ export function EmployeeDashboard() {
     }
   }, [offices, selectedOfficeId])
 
-  const canSubmit = capturedPhoto && validatedLocation && selectedOffice
+  // Can only submit if: photo captured, face verified, location validated, office selected
+  const canSubmit = capturedPhoto && faceVerified && validatedLocation && selectedOffice
 
   const handleSubmitAttendance = async () => {
     if (!canSubmit) return
+
+    if (!faceVerified) {
+      toast.error('Verifikasi wajah gagal. Wajah tidak cocok dengan data terdaftar.')
+      return
+    }
 
     setIsSubmitting(true)
     try {
@@ -259,6 +286,7 @@ export function EmployeeDashboard() {
           photo: capturedPhoto,
           confidence: capturedConfidence,
           officeId: selectedOfficeId,
+          faceVerified: true,
         }),
       })
 
@@ -328,6 +356,27 @@ export function EmployeeDashboard() {
           </Badge>
         </div>
       </motion.div>
+
+      {/* Face Registration Reminder */}
+      {user && !user.faceDescriptor && !userFaceDescriptor && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.05 }}
+        >
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30">
+            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Data wajah belum terdaftar
+              </p>
+              <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                Daftarkan wajah Anda di profil untuk mengaktifkan verifikasi wajah saat absensi
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Clock & Date */}
       <motion.div
@@ -737,31 +786,38 @@ export function EmployeeDashboard() {
               <div className="flex items-center gap-2 text-sm">
                 <div
                   className={`flex h-5 w-5 items-center justify-center rounded-full ${
-                    capturedPhoto
+                    faceVerified
                       ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
-                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
+                      : capturedPhoto
+                        ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+                        : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
                   }`}
                 >
-                  {capturedPhoto ? (
+                  {faceVerified ? (
                     <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : capturedPhoto ? (
+                    <ShieldX className="h-3.5 w-3.5" />
                   ) : (
                     <span className="text-[10px] font-bold">1</span>
                   )}
                 </div>
                 <span
                   className={
-                    capturedPhoto
+                    faceVerified
                       ? 'text-emerald-700 dark:text-emerald-300 font-medium'
-                      : 'text-muted-foreground'
+                      : capturedPhoto
+                        ? 'text-red-600 dark:text-red-400 font-medium'
+                        : 'text-muted-foreground'
                   }
                 >
-                  Verifikasi Wajah
+                  {faceVerified ? 'Wajah Terverifikasi' : capturedPhoto ? 'Verifikasi Gagal' : 'Verifikasi Wajah'}
                 </span>
-                {capturedPhoto && (
+                {faceVerified && (
                   <Badge
                     variant="secondary"
                     className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                   >
+                    <ShieldCheck className="mr-1 h-3 w-3" />
                     {(capturedConfidence * 100).toFixed(0)}%
                   </Badge>
                 )}
@@ -802,7 +858,10 @@ export function EmployeeDashboard() {
 
             {/* Camera & Location validators side by side on desktop */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <CameraView onCapture={handleCapture} />
+              <CameraView
+                onCapture={handleCapture}
+                storedFaceDescriptor={userFaceDescriptor || user?.faceDescriptor || null}
+              />
               {selectedOffice ? (
                 <LocationValidator
                   key={locationValidatorKeyRef.current || selectedOfficeId}

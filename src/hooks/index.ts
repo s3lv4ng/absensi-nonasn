@@ -85,29 +85,37 @@ export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const pendingStreamRef = useRef<MediaStream | null>(null)
   const [isActive, setIsActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
+  const [isReady, setIsReady] = useState(false) // Video is playing and ready
 
-  // Attach pending stream to video element when it becomes available
+  // Wait for video to be ready (playing)
   useEffect(() => {
-    if (isActive && pendingStreamRef.current && videoRef.current) {
-      videoRef.current.srcObject = pendingStreamRef.current
-      streamRef.current = pendingStreamRef.current
-      pendingStreamRef.current = null
-      videoRef.current.play().catch(() => {
-        // Autoplay may be blocked, try with muted
-        if (videoRef.current) {
-          videoRef.current.muted = true
-          videoRef.current.play().catch(() => {})
-        }
-      })
+    const video = videoRef.current
+    if (!video) return
+
+    const handleCanPlay = () => {
+      setIsReady(true)
+    }
+
+    const handlePlaying = () => {
+      setIsReady(true)
+    }
+
+    video.addEventListener('canplay', handleCanPlay)
+    video.addEventListener('playing', handlePlaying)
+
+    return () => {
+      video.removeEventListener('canplay', handleCanPlay)
+      video.removeEventListener('playing', handlePlaying)
     }
   }, [isActive])
 
   const startCamera = useCallback(async () => {
     setError(null)
+    setIsReady(false)
+
     try {
       // Stop any existing stream first
       if (streamRef.current) {
@@ -124,24 +132,37 @@ export function useCamera() {
         audio: false,
       })
 
-      // Store the stream - it will be attached via useEffect when video element renders
-      pendingStreamRef.current = mediaStream
       streamRef.current = mediaStream
 
       // If video element is already in DOM, attach immediately
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
-        await videoRef.current.play().catch(() => {
+
+        // Important: Set these attributes before playing
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true
+
+        try {
+          await videoRef.current.play()
+          setIsReady(true)
+        } catch (playError) {
+          // Autoplay may be blocked, try with muted
+          console.warn('[Camera] Play failed, retrying with muted:', playError)
           if (videoRef.current) {
             videoRef.current.muted = true
-            videoRef.current.play().catch(() => {})
+            try {
+              await videoRef.current.play()
+              setIsReady(true)
+            } catch {
+              console.error('[Camera] Failed to play even with muted')
+            }
           }
-        })
-        pendingStreamRef.current = null
+        }
       }
 
       setIsActive(true)
     } catch (err) {
+      console.error('[Camera] Error accessing camera:', err)
       setError(
         err instanceof DOMException && err.name === 'NotAllowedError'
           ? 'Akses kamera ditolak. Silakan izinkan akses kamera.'
@@ -149,8 +170,26 @@ export function useCamera() {
             ? 'Kamera tidak ditemukan. Pastikan perangkat memiliki kamera.'
             : 'Tidak dapat mengakses kamera. Pastikan kamera tersedia dan tidak digunakan aplikasi lain.'
       )
+      setIsActive(false)
     }
   }, [])
+
+  // Attach stream to video when video element mounts after stream starts
+  useEffect(() => {
+    if (isActive && streamRef.current && videoRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.muted = true
+      videoRef.current.playsInline = true
+      videoRef.current.play().then(() => {
+        setIsReady(true)
+      }).catch(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = true
+          videoRef.current.play().catch(() => {})
+        }
+      })
+    }
+  }, [isActive])
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -161,6 +200,7 @@ export function useCamera() {
       videoRef.current.srcObject = null
     }
     setIsActive(false)
+    setIsReady(false)
   }, [])
 
   const capturePhoto = useCallback((): string | null => {
@@ -168,13 +208,19 @@ export function useCamera() {
 
     const video = videoRef.current
     const canvas = canvasRef.current
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+
+    // Use actual video dimensions (not CSS dimensions)
+    const videoWidth = video.videoWidth || 640
+    const videoHeight = video.videoHeight || 480
+
+    canvas.width = videoWidth
+    canvas.height = videoHeight
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return null
 
-    ctx.drawImage(video, 0, 0)
+    // Draw current frame (not mirrored - we'll mirror in display)
+    ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
     setCapturedPhoto(dataUrl)
     return dataUrl
@@ -194,6 +240,7 @@ export function useCamera() {
     videoRef,
     canvasRef,
     isActive,
+    isReady,
     error,
     capturedPhoto,
     startCamera,
