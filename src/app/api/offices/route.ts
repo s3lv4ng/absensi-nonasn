@@ -5,12 +5,17 @@ import { getAuthUser } from '@/lib/auth'
 export async function GET() {
   try {
     const authUser = await getAuthUser()
-    if (!authUser || authUser.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+    if (!authUser) {
+      return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
     }
 
+    // Admin sees all offices, employees see only active ones
+    const where = authUser.role === 'ADMIN' ? {} : { isActive: true }
+    const orderBy = authUser.role === 'ADMIN' ? { createdAt: 'desc' as const } : { name: 'asc' as const }
+
     const offices = await db.office.findMany({
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy,
     })
 
     return NextResponse.json({ offices })

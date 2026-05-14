@@ -48,3 +48,25 @@ Stage Summary:
 - Mobile bottom navbar added with responsive design (hidden on md+ screens)
 - Leave API updated for employee self-service cancellation
 - 2 new components created, 5 existing files updated
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix camera not showing + Add office location selector for employee attendance
+
+Work Log:
+- Fixed useCamera hook: replaced `stream` useState with `streamRef` useRef to avoid stale closure issue. `stopCamera` no longer depends on state, preventing the effect cleanup from immediately stopping the camera after startCamera
+- Fixed CameraView cleanup useEffect: changed dependency from [stopCamera] to [] (unmount-only) to prevent camera from being stopped on re-render
+- Updated EmployeeDashboard: replaced single OfficeSetting with multiple Office locations from /api/offices
+- Added office location selector (Select component) in attendance dialog with office name, address, radius info
+- Added step-0 in validation checklist: "Pilih Lokasi Kantor" before face/GPS verification
+- LocationValidator only renders after office is selected (shows placeholder otherwise)
+- Attendance POST API updated: accepts optional `officeId`, validates GPS against selected office, falls back to OfficeSetting if no officeId
+- Updated /api/offices GET: admin sees all offices, employees see only active ones
+- All linting passes clean
+
+Stage Summary:
+- Camera bug fixed (useRef for stream, unmount-only cleanup)
+- Employee can now choose which office location to validate against
+- Attendance API validates against selected office
+- 5 files modified: useCamera hook, CameraView, EmployeeDashboard, attendance API, offices API

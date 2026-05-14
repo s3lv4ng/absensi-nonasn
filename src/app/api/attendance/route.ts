@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { type, latitude, longitude, photo, confidence, status } = body
+    const { type, latitude, longitude, photo, confidence, status, officeId } = body
 
     if (!type || latitude === undefined || longitude === undefined) {
       return NextResponse.json(
@@ -19,34 +19,63 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get office settings for validation
-    const officeSetting = await db.officeSetting.findFirst()
-    if (!officeSetting) {
-      return NextResponse.json(
-        { error: 'Pengaturan kantor belum dikonfigurasi' },
-        { status: 400 }
-      )
+    // Get office location for validation - prefer selected office, fallback to OfficeSetting
+    let officeLat: number
+    let officeLon: number
+    let officeRadius: number
+    let officeStartTime: string
+    let officeLateTolerance: number
+
+    if (officeId) {
+      const office = await db.office.findUnique({ where: { id: officeId } })
+      if (!office) {
+        return NextResponse.json(
+          { error: 'Lokasi kantor tidak ditemukan' },
+          { status: 400 }
+        )
+      }
+      officeLat = office.latitude
+      officeLon = office.longitude
+      officeRadius = office.radiusMeter
+      // Get time settings from OfficeSetting for late tolerance
+      const officeSetting = await db.officeSetting.findFirst()
+      officeStartTime = officeSetting?.startTime || '08:00'
+      officeLateTolerance = officeSetting?.lateTolerance || 15
+    } else {
+      // Fallback to legacy OfficeSetting
+      const officeSetting = await db.officeSetting.findFirst()
+      if (!officeSetting) {
+        return NextResponse.json(
+          { error: 'Pengaturan kantor belum dikonfigurasi' },
+          { status: 400 }
+        )
+      }
+      officeLat = officeSetting.latitude
+      officeLon = officeSetting.longitude
+      officeRadius = officeSetting.radiusMeter
+      officeStartTime = officeSetting.startTime
+      officeLateTolerance = officeSetting.lateTolerance
     }
 
     // Validate GPS location using Haversine
     const R = 6371000
     const toRad = (deg: number) => (deg * Math.PI) / 180
-    const φ1 = toRad(officeSetting.latitude)
+    const φ1 = toRad(officeLat)
     const φ2 = toRad(latitude)
-    const Δφ = toRad(latitude - officeSetting.latitude)
-    const Δλ = toRad(longitude - officeSetting.longitude)
+    const Δφ = toRad(latitude - officeLat)
+    const Δλ = toRad(longitude - officeLon)
     const a =
       Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
       Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     const distance = R * c
 
-    if (distance > officeSetting.radiusMeter) {
+    if (distance > officeRadius) {
       return NextResponse.json(
         {
-          error: `Anda berada di luar radius kantor (${Math.round(distance)}m dari kantor, max ${officeSetting.radiusMeter}m)`,
+          error: `Anda berada di luar radius kantor (${Math.round(distance)}m dari kantor, max ${officeRadius}m)`,
           distance: Math.round(distance),
-          maxRadius: officeSetting.radiusMeter,
+          maxRadius: officeRadius,
         },
         { status: 400 }
       )
@@ -80,9 +109,9 @@ export async function POST(request: NextRequest) {
     let attendanceStatus = status || 'HADIR'
     if (type === 'MASUK') {
       const now = new Date()
-      const [hours, minutes] = officeSetting.startTime.split(':').map(Number)
+      const [hours, minutes] = officeStartTime.split(':').map(Number)
       const startTime = new Date(now)
-      startTime.setHours(hours, minutes + officeSetting.lateTolerance, 0, 0)
+      startTime.setHours(hours, minutes + officeLateTolerance, 0, 0)
 
       if (now > startTime) {
         attendanceStatus = 'TELAT'

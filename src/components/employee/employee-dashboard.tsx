@@ -11,6 +11,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -29,9 +36,11 @@ import {
   Users,
   Timer,
   Fingerprint,
+  MapPin,
+  Building2,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Attendance, OfficeSetting, AttendanceType } from '@/types'
+import type { Attendance, Office, AttendanceType } from '@/types'
 
 interface TodayAttendance {
   masuk: Attendance | null
@@ -59,9 +68,11 @@ export function EmployeeDashboard() {
     persentaseKehadiran: 0,
     totalRecords: 0,
   })
-  const [officeSettings, setOfficeSettings] = useState<OfficeSetting | null>(null)
+  const [offices, setOffices] = useState<Office[]>([])
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string>('')
   const [isLoadingToday, setIsLoadingToday] = useState(true)
   const [isLoadingStats, setIsLoadingStats] = useState(true)
+  const [isLoadingOffices, setIsLoadingOffices] = useState(true)
 
   // Attendance dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -73,6 +84,9 @@ export function EmployeeDashboard() {
     longitude: number
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Get selected office data
+  const selectedOffice = offices.find((o) => o.id === selectedOfficeId) || null
 
   // Fetch today's attendance
   const fetchTodayAttendance = useCallback(async () => {
@@ -143,24 +157,32 @@ export function EmployeeDashboard() {
     }
   }, [])
 
-  // Fetch office settings
-  const fetchOfficeSettings = useCallback(async () => {
+  // Fetch office locations
+  const fetchOffices = useCallback(async () => {
     try {
-      const res = await fetch('/api/settings')
+      setIsLoadingOffices(true)
+      const res = await fetch('/api/offices')
       if (res.ok) {
         const data = await res.json()
-        setOfficeSettings(data.setting)
+        const officeList: Office[] = data.offices || []
+        setOffices(officeList)
+        // Auto-select first office if only one exists
+        if (officeList.length === 1) {
+          setSelectedOfficeId(officeList[0].id)
+        }
       }
     } catch {
-      // Settings might not be available, silently fail
+      // Offices might not be available, silently fail
+    } finally {
+      setIsLoadingOffices(false)
     }
   }, [])
 
   useEffect(() => {
     fetchTodayAttendance()
     fetchMonthStats()
-    fetchOfficeSettings()
-  }, [fetchTodayAttendance, fetchMonthStats, fetchOfficeSettings])
+    fetchOffices()
+  }, [fetchTodayAttendance, fetchMonthStats, fetchOffices])
 
   // Helper to calculate working days so far
   function getWorkingDaysSoFar(year: number, month: number): number {
@@ -200,7 +222,7 @@ export function EmployeeDashboard() {
     setValidatedLocation(location)
   }
 
-  const canSubmit = capturedPhoto && validatedLocation
+  const canSubmit = capturedPhoto && validatedLocation && selectedOffice
 
   const handleSubmitAttendance = async () => {
     if (!canSubmit) return
@@ -216,6 +238,7 @@ export function EmployeeDashboard() {
           longitude: validatedLocation!.longitude,
           photo: capturedPhoto,
           confidence: capturedConfidence,
+          officeId: selectedOfficeId,
         }),
       })
 
@@ -584,8 +607,96 @@ export function EmployeeDashboard() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Office Location Selector */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-[#1e40af] dark:text-blue-400">
+                <Building2 className="h-4 w-4" />
+                Pilih Lokasi Kantor
+              </div>
+              {isLoadingOffices ? (
+                <Skeleton className="h-10 w-full" />
+              ) : offices.length === 0 ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Belum ada lokasi kantor yang dikonfigurasi. Hubungi administrator.
+                  </p>
+                </div>
+              ) : (
+                <Select
+                  value={selectedOfficeId}
+                  onValueChange={(value) => {
+                    setSelectedOfficeId(value)
+                    // Reset location validation when office changes
+                    setValidatedLocation(null)
+                  }}
+                >
+                  <SelectTrigger className="border-blue-200 focus:border-[#1e40af] dark:border-blue-800">
+                    <SelectValue placeholder="Pilih lokasi kantor Anda..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {offices.map((office) => (
+                      <SelectItem key={office.id} value={office.id}>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5 text-[#1e40af] dark:text-blue-400" />
+                          <span>{office.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({office.radiusMeter}m radius)
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {selectedOffice && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
+                  <MapPin className="h-3.5 w-3.5 text-[#1e40af] dark:text-blue-400 shrink-0" />
+                  <span>
+                    {selectedOffice.address || selectedOffice.name}
+                    {' — '}
+                    {selectedOffice.latitude.toFixed(4)}, {selectedOffice.longitude.toFixed(4)}
+                    {' — '}
+                    Radius: {selectedOffice.radiusMeter}m
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Validation checklist */}
             <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-sm">
+                <div
+                  className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                    selectedOfficeId
+                      ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400'
+                      : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
+                  }`}
+                >
+                  {selectedOfficeId ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <span className="text-[10px] font-bold">0</span>
+                  )}
+                </div>
+                <span
+                  className={
+                    selectedOfficeId
+                      ? 'text-emerald-700 dark:text-emerald-300 font-medium'
+                      : 'text-muted-foreground'
+                  }
+                >
+                  Pilih Lokasi Kantor
+                </span>
+                {selectedOfficeId && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  >
+                    {selectedOffice?.name}
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center gap-2 text-sm">
                 <div
                   className={`flex h-5 w-5 items-center justify-center rounded-full ${
@@ -655,22 +766,22 @@ export function EmployeeDashboard() {
             {/* Camera & Location validators side by side on desktop */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <CameraView onCapture={handleCapture} />
-              {officeSettings ? (
+              {selectedOffice ? (
                 <LocationValidator
                   onLocationValid={handleLocationValid}
-                  officeLat={officeSettings.latitude}
-                  officeLon={officeSettings.longitude}
-                  radiusMeter={officeSettings.radiusMeter}
+                  officeLat={selectedOffice.latitude}
+                  officeLon={selectedOffice.longitude}
+                  radiusMeter={selectedOffice.radiusMeter}
                 />
               ) : (
                 <Card className="border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30">
                   <CardContent className="p-6 flex flex-col items-center justify-center gap-3 min-h-[200px]">
-                    <AlertTriangle className="h-8 w-8 text-amber-500" />
+                    <Building2 className="h-8 w-8 text-amber-500" />
                     <p className="text-sm text-center text-amber-700 dark:text-amber-300">
-                      Pengaturan kantor belum dikonfigurasi
+                      Pilih lokasi kantor terlebih dahulu
                     </p>
                     <p className="text-xs text-center text-muted-foreground">
-                      Hubungi administrator untuk mengatur lokasi kantor
+                      Validasi GPS akan aktif setelah memilih lokasi
                     </p>
                   </CardContent>
                 </Card>

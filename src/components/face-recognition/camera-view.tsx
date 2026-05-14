@@ -39,12 +39,12 @@ export function CameraView({ onCapture }: CameraViewProps) {
     confidence: number
   } | null>(null)
 
-  // Cleanup camera stream on unmount
+  // Cleanup camera stream on unmount only
   useEffect(() => {
     return () => {
       stopCamera()
     }
-  }, [stopCamera])
+  }, [])
 
   const handleStartCamera = useCallback(async () => {
     setCapturedPhoto(null)

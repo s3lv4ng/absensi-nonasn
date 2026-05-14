@@ -84,7 +84,7 @@ export function useClock() {
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const [isActive, setIsActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
@@ -102,7 +102,7 @@ export function useCamera() {
         await videoRef.current.play()
       }
 
-      setStream(mediaStream)
+      streamRef.current = mediaStream
       setIsActive(true)
     } catch (err) {
       setError(
@@ -114,15 +114,15 @@ export function useCamera() {
   }, [])
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop())
-      setStream(null)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
     setIsActive(false)
-  }, [stream])
+  }, [])
 
   const capturePhoto = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current) return null
@@ -141,19 +141,19 @@ export function useCamera() {
     return dataUrl
   }, [])
 
-  // Cleanup on unmount
+  // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop())
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
       }
     }
-  }, [stream])
+  }, [])
 
   return {
     videoRef,
     canvasRef,
-    stream,
     isActive,
     error,
     capturedPhoto,
