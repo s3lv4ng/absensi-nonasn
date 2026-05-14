@@ -19,12 +19,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get the user with their assigned shift
+    const userWithShift = await db.user.findUnique({
+      where: { id: authUser.userId },
+      include: { shift: true },
+    })
+
     // Get office location for validation - prefer selected office, fallback to OfficeSetting
     let officeLat: number
     let officeLon: number
     let officeRadius: number
-    let officeStartTime: string
-    let officeLateTolerance: number
+    let shiftStartTime: string
+    let shiftLateTolerance: number
+    let shiftId: string | null = null
 
     if (officeId) {
       const office = await db.office.findUnique({ where: { id: officeId } })
@@ -37,10 +44,6 @@ export async function POST(request: NextRequest) {
       officeLat = office.latitude
       officeLon = office.longitude
       officeRadius = office.radiusMeter
-      // Get time settings from OfficeSetting for late tolerance
-      const officeSetting = await db.officeSetting.findFirst()
-      officeStartTime = officeSetting?.startTime || '08:00'
-      officeLateTolerance = officeSetting?.lateTolerance || 15
     } else {
       // Fallback to legacy OfficeSetting
       const officeSetting = await db.officeSetting.findFirst()
@@ -53,8 +56,19 @@ export async function POST(request: NextRequest) {
       officeLat = officeSetting.latitude
       officeLon = officeSetting.longitude
       officeRadius = officeSetting.radiusMeter
-      officeStartTime = officeSetting.startTime
-      officeLateTolerance = officeSetting.lateTolerance
+    }
+
+    // Determine time settings: prefer user's assigned shift, fallback to OfficeSetting
+    if (userWithShift?.shift && userWithShift.shift.isActive) {
+      // Use the user's assigned work shift
+      shiftStartTime = userWithShift.shift.startTime
+      shiftLateTolerance = userWithShift.shift.lateTolerance
+      shiftId = userWithShift.shift.id
+    } else {
+      // Fallback to OfficeSetting or defaults
+      const officeSetting = await db.officeSetting.findFirst()
+      shiftStartTime = officeSetting?.startTime || '08:00'
+      shiftLateTolerance = officeSetting?.lateTolerance || 15
     }
 
     // Validate GPS location using Haversine
@@ -105,13 +119,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine status
+    // Determine status based on user's assigned shift
     let attendanceStatus = status || 'HADIR'
     if (type === 'MASUK') {
       const now = new Date()
-      const [hours, minutes] = officeStartTime.split(':').map(Number)
+      const [hours, minutes] = shiftStartTime.split(':').map(Number)
       const startTime = new Date(now)
-      startTime.setHours(hours, minutes + officeLateTolerance, 0, 0)
+      startTime.setHours(hours, minutes + shiftLateTolerance, 0, 0)
 
       if (now > startTime) {
         attendanceStatus = 'TELAT'
@@ -127,6 +141,7 @@ export async function POST(request: NextRequest) {
         photo: photo || null,
         confidence: confidence || 0,
         status: attendanceStatus,
+        shiftId: shiftId,
       },
     })
 
@@ -195,6 +210,25 @@ export async function GET(request: NextRequest) {
               photo: true,
               unitKerja: true,
               jabatan: true,
+              shiftId: true,
+              shift: {
+                select: {
+                  id: true,
+                  name: true,
+                  startTime: true,
+                  endTime: true,
+                  color: true,
+                },
+              },
+            },
+          },
+          shift: {
+            select: {
+              id: true,
+              name: true,
+              startTime: true,
+              endTime: true,
+              color: true,
             },
           },
         },

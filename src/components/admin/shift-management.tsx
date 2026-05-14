@@ -14,9 +14,13 @@ import {
   Timer,
   Palette,
   Zap,
+  UserPlus,
+  UserMinus,
+  Search,
+  X,
 } from 'lucide-react'
 
-import type { WorkShift } from '@/types'
+import type { WorkShift, User } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -179,10 +183,12 @@ function ShiftCard({
   shift,
   onEdit,
   onDelete,
+  onManageEmployees,
 }: {
   shift: WorkShift
   onEdit: (shift: WorkShift) => void
   onDelete: (shift: WorkShift) => void
+  onManageEmployees: (shift: WorkShift) => void
 }) {
   const activeDays = shift.workDays ? shift.workDays.split(',').filter(Boolean) : []
   const userCount = shift._count?.users ?? 0
@@ -271,6 +277,14 @@ function ShiftCard({
               <Button
                 variant="outline"
                 size="sm"
+                className="h-7 px-2.5 text-xs border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                onClick={() => onManageEmployees(shift)}
+              >
+                <UserPlus className="size-3 mr-1" /> Pegawai
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 className="h-7 px-2.5 text-xs border-blue-200 dark:border-blue-800 text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 onClick={() => onEdit(shift)}
               >
@@ -289,6 +303,408 @@ function ShiftCard({
         </CardContent>
       </Card>
     </motion.div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Employee Assignment Dialog
+// ---------------------------------------------------------------------------
+
+function EmployeeAssignmentDialog({
+  shift,
+  open,
+  onOpenChange,
+  onRefresh,
+}: {
+  shift: WorkShift | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onRefresh: () => void
+}) {
+  const [assignedUsers, setAssignedUsers] = useState<User[]>([])
+  const [availableUsers, setAvailableUsers] = useState<User[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isLoadingAssigned, setIsLoadingAssigned] = useState(false)
+  const [isLoadingAvailable, setIsLoadingAvailable] = useState(false)
+  const [isAssigning, setIsAssigning] = useState(false)
+  const [isUnassigning, setIsUnassigning] = useState(false)
+  const [activeTab, setActiveTab] = useState<'assigned' | 'available'>('assigned')
+
+  // Fetch assigned users when dialog opens
+  const fetchAssignedUsers = useCallback(async () => {
+    if (!shift) return
+    try {
+      setIsLoadingAssigned(true)
+      const res = await fetch(`/api/shifts/${shift.id}/users`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal memuat data pegawai')
+      }
+      const data = await res.json()
+      setAssignedUsers(data.users || [])
+    } catch {
+      toast.error('Gagal memuat pegawai yang ditugaskan')
+    } finally {
+      setIsLoadingAssigned(false)
+    }
+  }, [shift])
+
+  // Fetch available (unassigned) employees based on search
+  const fetchAvailableUsers = useCallback(async () => {
+    try {
+      setIsLoadingAvailable(true)
+      const params = new URLSearchParams({
+        role: 'PEGAWAI',
+        limit: '50',
+      })
+      if (searchQuery) {
+        params.set('search', searchQuery)
+      }
+      const res = await fetch(`/api/users?${params}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal mencari pegawai')
+      }
+      const data = await res.json()
+      // Filter out users already assigned to this shift
+      const assignedIds = new Set(assignedUsers.map((u) => u.id))
+      const available = (data.users || []).filter(
+        (u: User) => !assignedIds.has(u.id)
+      )
+      setAvailableUsers(available)
+    } catch {
+      toast.error('Gagal mencari pegawai')
+    } finally {
+      setIsLoadingAvailable(false)
+    }
+  }, [searchQuery, assignedUsers])
+
+  // Load data when dialog opens
+  useEffect(() => {
+    if (open && shift) {
+      setSearchQuery('')
+      setActiveTab('assigned')
+      fetchAssignedUsers()
+    }
+  }, [open, shift, fetchAssignedUsers])
+
+  // Fetch available users when tab switches to available or search changes
+  useEffect(() => {
+    if (open && shift && activeTab === 'available') {
+      fetchAvailableUsers()
+    }
+  }, [open, shift, activeTab, searchQuery, fetchAvailableUsers])
+
+  // Assign a user to the shift
+  const handleAssign = async (user: User) => {
+    if (!shift) return
+    try {
+      setIsAssigning(true)
+      const res = await fetch('/api/shifts/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId: shift.id, userIds: [user.id] }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal menugaskan pegawai')
+      }
+      toast.success('Pegawai ditugaskan', {
+        description: `${user.nama} berhasil ditugaskan ke shift ${shift.name}`,
+      })
+      // Refresh both lists
+      await fetchAssignedUsers()
+      if (activeTab === 'available') {
+        await fetchAvailableUsers()
+      }
+      onRefresh()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
+      toast.error('Gagal menugaskan', { description: message })
+    } finally {
+      setIsAssigning(false)
+    }
+  }
+
+  // Unassign a user from the shift
+  const handleUnassign = async (user: User) => {
+    if (!shift) return
+    try {
+      setIsUnassigning(true)
+      const res = await fetch('/api/shifts/assign', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: [user.id] }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Gagal melepas pegawai')
+      }
+      toast.success('Pegawai dilepas', {
+        description: `${user.nama} berhasil dilepas dari shift ${shift.name}`,
+      })
+      // Refresh both lists
+      await fetchAssignedUsers()
+      if (activeTab === 'available') {
+        await fetchAvailableUsers()
+      }
+      onRefresh()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan'
+      toast.error('Gagal melepas', { description: message })
+    } finally {
+      setIsUnassigning(false)
+    }
+  }
+
+  if (!shift) return null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 border-blue-100/50 dark:border-blue-900/30 max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
+            <Users className="size-5" />
+            Kelola Pegawai — {shift.name}
+          </DialogTitle>
+          <DialogDescription>
+            Atur pegawai yang ditugaskan pada shift <strong>{shift.name}</strong> ({shift.startTime} — {shift.endTime})
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Tab Switcher */}
+        <div className="flex gap-1 p-1 rounded-lg bg-blue-50/50 dark:bg-blue-900/20">
+          <button
+            type="button"
+            onClick={() => setActiveTab('assigned')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+              activeTab === 'assigned'
+                ? 'bg-white dark:bg-gray-800 text-[#1e40af] dark:text-blue-300 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users className="size-3.5" />
+            Ditugaskan
+            <Badge
+              variant="outline"
+              className="ml-1 text-[10px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800"
+            >
+              {assignedUsers.length}
+            </Badge>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('available')}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+              activeTab === 'available'
+                ? 'bg-white dark:bg-gray-800 text-[#1e40af] dark:text-blue-300 shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <UserPlus className="size-3.5" />
+            Tambah Pegawai
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <AnimatePresence mode="wait">
+            {activeTab === 'assigned' ? (
+              <motion.div
+                key="assigned"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                transition={{ duration: 0.15 }}
+                className="h-full"
+              >
+                <ScrollArea className="max-h-[45vh] pr-2">
+                  {isLoadingAssigned ? (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
+                          <Skeleton className="size-9 rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                          <Skeleton className="h-7 w-7 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : assignedUsers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <div className="size-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+                        <Users className="size-6 text-blue-300 dark:text-blue-600" />
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground">Belum ada pegawai ditugaskan</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Klik tab &quot;Tambah Pegawai&quot; untuk menugaskan pegawai ke shift ini
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 p-1">
+                      {assignedUsers.map((user) => (
+                        <motion.div
+                          key={user.id}
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group"
+                        >
+                          {/* Avatar */}
+                          <div
+                            className="size-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            style={{ backgroundColor: shift.color }}
+                          >
+                            {user.nama.charAt(0).toUpperCase()}
+                          </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{user.nama}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {user.nip}
+                              {user.unitKerja ? ` · ${user.unitKerja}` : ''}
+                            </p>
+                          </div>
+                          {/* Unassign Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0 border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleUnassign(user)}
+                            disabled={isUnassigning}
+                            title="Lepas dari shift"
+                          >
+                            <UserMinus className="size-3.5" />
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="available"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.15 }}
+                className="h-full flex flex-col"
+              >
+                {/* Search Bar */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari nama atau NIP pegawai..."
+                    className="pl-9 bg-white dark:bg-gray-800 border-blue-100/50 dark:border-blue-900/30 h-9 text-sm"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <ScrollArea className="max-h-[38vh] pr-2">
+                  {isLoadingAvailable ? (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-lg">
+                          <Skeleton className="size-9 rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                          <Skeleton className="h-7 w-7 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : availableUsers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <div className="size-12 rounded-full bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center mb-3">
+                        <Search className="size-6 text-gray-300 dark:text-gray-600" />
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {searchQuery ? 'Pegawai tidak ditemukan' : 'Semua pegawai sudah ditugaskan'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {searchQuery
+                          ? 'Coba kata kunci lain untuk mencari pegawai'
+                          : 'Tidak ada pegawai yang tersedia untuk ditugaskan'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 p-1">
+                      {availableUsers.map((user) => (
+                        <motion.div
+                          key={user.id}
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-colors group"
+                        >
+                          {/* Avatar */}
+                          <div className="size-9 rounded-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold shrink-0">
+                            {user.nama.charAt(0).toUpperCase()}
+                          </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{user.nama}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {user.nip}
+                              {user.unitKerja ? ` · ${user.unitKerja}` : ''}
+                              {user.shiftId ? (
+                                <span className="text-amber-600 dark:text-amber-400 ml-1">
+                                  (Shift lain)
+                                </span>
+                              ) : null}
+                            </p>
+                          </div>
+                          {/* Assign Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2.5 text-xs border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                            onClick={() => handleAssign(user)}
+                            disabled={isAssigning}
+                          >
+                            <UserPlus className="size-3 mr-1" /> Tugas
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div
+              className="size-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: shift.color }}
+            />
+            <span>{shift.name} · {shift.startTime} — {shift.endTime}</span>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="border-blue-200 dark:border-blue-800"
+          >
+            Selesai
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -312,13 +728,17 @@ export function ShiftManagement() {
   const [deleteTarget, setDeleteTarget] = useState<WorkShift | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Employee assignment dialog
+  const [employeeDialogShift, setEmployeeDialogShift] = useState<WorkShift | null>(null)
+  const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false)
+
   // ---- Fetch shifts ----
   const fetchShifts = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const res = await fetch('/api/shifts')
+      const res = await fetch('/api/shifts?includeUsers=true')
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || 'Gagal memuat data jam kerja')
@@ -486,6 +906,12 @@ export function ShiftManagement() {
     }
   }
 
+  // ---- Manage Employees ----
+  const handleManageEmployees = (shift: WorkShift) => {
+    setEmployeeDialogShift(shift)
+    setEmployeeDialogOpen(true)
+  }
+
   const activeWorkDays = formData.workDays.split(',').filter(Boolean)
 
   // ---- Loading state ----
@@ -571,6 +997,7 @@ export function ShiftManagement() {
                   shift={shift}
                   onEdit={handleOpenEdit}
                   onDelete={setDeleteTarget}
+                  onManageEmployees={handleManageEmployees}
                 />
               ))}
             </AnimatePresence>
@@ -897,6 +1324,16 @@ export function ShiftManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ================================================================= */}
+      {/* Employee Assignment Dialog                                        */}
+      {/* ================================================================= */}
+      <EmployeeAssignmentDialog
+        shift={employeeDialogShift}
+        open={employeeDialogOpen}
+        onOpenChange={setEmployeeDialogOpen}
+        onRefresh={fetchShifts}
+      />
     </motion.div>
   )
 }

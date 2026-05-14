@@ -42,6 +42,16 @@ export async function GET(request: NextRequest) {
           faceDescriptor: true,
           unitKerja: true,
           jabatan: true,
+          shiftId: true,
+          shift: {
+            select: {
+              id: true,
+              name: true,
+              startTime: true,
+              endTime: true,
+              color: true,
+            },
+          },
           isActive: true,
           createdAt: true,
           updatedAt: true,

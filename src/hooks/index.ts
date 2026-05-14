@@ -85,30 +85,69 @@ export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const pendingStreamRef = useRef<MediaStream | null>(null)
   const [isActive, setIsActive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
 
+  // Attach pending stream to video element when it becomes available
+  useEffect(() => {
+    if (isActive && pendingStreamRef.current && videoRef.current) {
+      videoRef.current.srcObject = pendingStreamRef.current
+      streamRef.current = pendingStreamRef.current
+      pendingStreamRef.current = null
+      videoRef.current.play().catch(() => {
+        // Autoplay may be blocked, try with muted
+        if (videoRef.current) {
+          videoRef.current.muted = true
+          videoRef.current.play().catch(() => {})
+        }
+      })
+    }
+  }, [isActive])
+
   const startCamera = useCallback(async () => {
     setError(null)
     try {
+      // Stop any existing stream first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
         audio: false,
       })
 
+      // Store the stream - it will be attached via useEffect when video element renders
+      pendingStreamRef.current = mediaStream
+      streamRef.current = mediaStream
+
+      // If video element is already in DOM, attach immediately
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
-        await videoRef.current.play()
+        await videoRef.current.play().catch(() => {
+          if (videoRef.current) {
+            videoRef.current.muted = true
+            videoRef.current.play().catch(() => {})
+          }
+        })
+        pendingStreamRef.current = null
       }
 
-      streamRef.current = mediaStream
       setIsActive(true)
     } catch (err) {
       setError(
         err instanceof DOMException && err.name === 'NotAllowedError'
           ? 'Akses kamera ditolak. Silakan izinkan akses kamera.'
-          : 'Tidak dapat mengakses kamera. Pastikan kamera tersedia.'
+          : err instanceof DOMException && err.name === 'NotFoundError'
+            ? 'Kamera tidak ditemukan. Pastikan perangkat memiliki kamera.'
+            : 'Tidak dapat mengakses kamera. Pastikan kamera tersedia dan tidak digunakan aplikasi lain.'
       )
     }
   }, [])

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useGeolocation } from '@/hooks'
-import { haversineDistance, validateGPSLocation, formatDistance } from '@/lib/gps'
+import { validateGPSLocation, formatDistance } from '@/lib/gps'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,7 @@ interface LocationValidatorProps {
   officeLat: number
   officeLon: number
   radiusMeter: number
+  autoValidate?: boolean // If true, auto-trigger GPS validation on mount
 }
 
 export function LocationValidator({
@@ -30,6 +31,7 @@ export function LocationValidator({
   officeLat,
   officeLon,
   radiusMeter,
+  autoValidate = false,
 }: LocationValidatorProps) {
   const { location, error, isLoading, requestLocation } = useGeolocation()
   const [validationResult, setValidationResult] = useState<{
@@ -37,6 +39,7 @@ export function LocationValidator({
     distance: number
     message: string
   } | null>(null)
+  const [hasAutoValidated, setHasAutoValidated] = useState(false)
 
   const handleRequestLocation = useCallback(async () => {
     setValidationResult(null)
@@ -51,6 +54,18 @@ export function LocationValidator({
       }
     }
   }, [requestLocation, officeLat, officeLon, radiusMeter, onLocationValid])
+
+  // Auto-validate on mount if autoValidate is true
+  useEffect(() => {
+    if (autoValidate && !hasAutoValidated) {
+      setHasAutoValidated(true)
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        handleRequestLocation()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [autoValidate, hasAutoValidated, handleRequestLocation])
 
   // Calculate distance percentage for the circular indicator
   const distancePercentage = useMemo(() => {
@@ -337,7 +352,7 @@ export function LocationValidator({
               ) : (
                 <>
                   <Crosshair className="mr-2 h-4 w-4" />
-                  Ambil Lokasi
+                  {validationResult ? 'Validasi Ulang Lokasi' : 'Ambil Lokasi'}
                 </>
               )}
             </Button>

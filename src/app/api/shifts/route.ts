@@ -2,17 +2,41 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const authUser = await getAuthUser()
     if (!authUser || authUser.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const includeUsers = searchParams.get('includeUsers') === 'true'
+
     const shifts = await db.workShift.findMany({
       orderBy: { createdAt: 'asc' },
       include: {
         _count: { select: { users: true } },
+        ...(includeUsers
+          ? {
+              users: {
+                select: {
+                  id: true,
+                  nip: true,
+                  nama: true,
+                  email: true,
+                  role: true,
+                  photo: true,
+                  unitKerja: true,
+                  jabatan: true,
+                  shiftId: true,
+                  isActive: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+                orderBy: { nama: 'asc' },
+              },
+            }
+          : {}),
       },
     })
 

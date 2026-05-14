@@ -113,6 +113,55 @@ export function CameraView({ onCapture }: CameraViewProps) {
 
           {/* Camera / Preview Area */}
           <div className="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-2xl border-2 border-blue-200 bg-gradient-to-b from-slate-900 to-slate-800 shadow-lg shadow-blue-500/10 dark:border-blue-800">
+            {/* Always render video element so ref is available for stream attachment */}
+            <div className={`relative h-full w-full ${isActive && !capturedPhoto ? '' : 'hidden'}`}>
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                playsInline
+                autoPlay
+                muted
+                style={{ transform: 'scaleX(-1)' }}
+              />
+
+              {/* Face detection oval overlay */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div
+                  className="relative"
+                  style={{
+                    width: '55%',
+                    height: '72%',
+                  }}
+                >
+                  <div
+                    className="absolute inset-0 rounded-[50%] border-2 border-blue-400/70 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+                    style={{
+                      animation: 'pulse-oval 2s ease-in-out infinite',
+                    }}
+                  />
+                  {/* Corner brackets */}
+                  <div className="absolute -left-1 -top-1 h-5 w-5 border-l-2 border-t-2 border-blue-400" />
+                  <div className="absolute -right-1 -top-1 h-5 w-5 border-r-2 border-t-2 border-blue-400" />
+                  <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-2 border-l-2 border-blue-400" />
+                  <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-2 border-r-2 border-blue-400" />
+                </div>
+                {/* Scanning line effect */}
+                <div
+                  className="absolute left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
+                  style={{
+                    animation: 'scan-line 2.5s ease-in-out infinite',
+                  }}
+                />
+              </div>
+
+              {/* Active indicator */}
+              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                <span className="text-xs font-medium text-white">LIVE</span>
+              </div>
+            </div>
+
+            {/* Placeholder when camera is not active */}
             {!isActive && !capturedPhoto && (
               <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10">
@@ -121,55 +170,6 @@ export function CameraView({ onCapture }: CameraViewProps) {
                 <p className="text-center text-sm text-slate-400">
                   Klik &ldquo;Mulai Kamera&rdquo; untuk memulai
                 </p>
-              </div>
-            )}
-
-            {/* Live camera feed */}
-            {isActive && (
-              <div className="relative h-full w-full">
-                <video
-                  ref={videoRef}
-                  className="h-full w-full object-cover"
-                  playsInline
-                  muted
-                  style={{ transform: 'scaleX(-1)' }}
-                />
-
-                {/* Face detection oval overlay */}
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div
-                    className="relative"
-                    style={{
-                      width: '55%',
-                      height: '72%',
-                    }}
-                  >
-                    <div
-                      className="absolute inset-0 rounded-[50%] border-2 border-blue-400/70 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
-                      style={{
-                        animation: 'pulse-oval 2s ease-in-out infinite',
-                      }}
-                    />
-                    {/* Corner brackets */}
-                    <div className="absolute -left-1 -top-1 h-5 w-5 border-l-2 border-t-2 border-blue-400" />
-                    <div className="absolute -right-1 -top-1 h-5 w-5 border-r-2 border-t-2 border-blue-400" />
-                    <div className="absolute -bottom-1 -left-1 h-5 w-5 border-b-2 border-l-2 border-blue-400" />
-                    <div className="absolute -bottom-1 -right-1 h-5 w-5 border-b-2 border-r-2 border-blue-400" />
-                  </div>
-                  {/* Scanning line effect */}
-                  <div
-                    className="absolute left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
-                    style={{
-                      animation: 'scan-line 2.5s ease-in-out infinite',
-                    }}
-                  />
-                </div>
-
-                {/* Active indicator */}
-                <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 backdrop-blur-sm">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                  <span className="text-xs font-medium text-white">LIVE</span>
-                </div>
               </div>
             )}
 

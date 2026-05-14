@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useClock } from '@/hooks'
 import { useAuthStore, useAppStore } from '@/store'
@@ -40,7 +40,7 @@ import {
   Building2,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Attendance, Office, AttendanceType } from '@/types'
+import type { Attendance, Office, WorkShift, AttendanceType } from '@/types'
 
 interface TodayAttendance {
   masuk: Attendance | null
@@ -73,6 +73,7 @@ export function EmployeeDashboard() {
   const [isLoadingToday, setIsLoadingToday] = useState(true)
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isLoadingOffices, setIsLoadingOffices] = useState(true)
+  const [userShift, setUserShift] = useState<WorkShift | null>(null)
 
   // Attendance dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -84,6 +85,9 @@ export function EmployeeDashboard() {
     longitude: number
   } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Track whether location was auto-validated for the current office selection
+  const locationValidatorKeyRef = useRef<string>('')
 
   // Get selected office data
   const selectedOffice = offices.find((o) => o.id === selectedOfficeId) || null
@@ -215,12 +219,28 @@ export function EmployeeDashboard() {
     setCapturedConfidence(confidence)
   }
 
-  const handleLocationValid = (location: {
+  const handleLocationValid = useCallback((location: {
     latitude: number
     longitude: number
   }) => {
     setValidatedLocation(location)
-  }
+  }, [])
+
+  // When office selection changes, update the key to force LocationValidator remount
+  // and auto-validate for the new office
+  const handleOfficeChange = useCallback((officeId: string) => {
+    setSelectedOfficeId(officeId)
+    setValidatedLocation(null)
+    locationValidatorKeyRef.current = officeId + '-' + Date.now()
+  }, [])
+
+  // Auto-select and auto-validate when offices load and there's only 1
+  useEffect(() => {
+    if (offices.length === 1 && !selectedOfficeId) {
+      setSelectedOfficeId(offices[0].id)
+      locationValidatorKeyRef.current = offices[0].id + '-' + Date.now()
+    }
+  }, [offices, selectedOfficeId])
 
   const canSubmit = capturedPhoto && validatedLocation && selectedOffice
 
@@ -279,6 +299,9 @@ export function EmployeeDashboard() {
       second: '2-digit',
     })
   }
+
+  // Determine if auto-validate should be on (only 1 office)
+  const shouldAutoValidate = offices.length === 1
 
   return (
     <div className="space-y-6">
@@ -611,7 +634,7 @@ export function EmployeeDashboard() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-[#1e40af] dark:text-blue-400">
                 <Building2 className="h-4 w-4" />
-                Pilih Lokasi Kantor
+                {offices.length === 1 ? 'Lokasi Kantor' : 'Pilih Lokasi Kantor'}
               </div>
               {isLoadingOffices ? (
                 <Skeleton className="h-10 w-full" />
@@ -622,14 +645,28 @@ export function EmployeeDashboard() {
                     Belum ada lokasi kantor yang dikonfigurasi. Hubungi administrator.
                   </p>
                 </div>
+              ) : offices.length === 1 ? (
+                // Single office - show as info badge, auto-selected
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                  <MapPin className="h-5 w-5 text-[#1e40af] dark:text-blue-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#1e40af] dark:text-blue-300 truncate">
+                      {offices[0].name}
+                    </p>
+                    {offices[0].address && (
+                      <p className="text-xs text-muted-foreground truncate">{offices[0].address}</p>
+                    )}
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] shrink-0">
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    Otomatis
+                  </Badge>
+                </div>
               ) : (
+                // Multiple offices - show dropdown
                 <Select
                   value={selectedOfficeId}
-                  onValueChange={(value) => {
-                    setSelectedOfficeId(value)
-                    // Reset location validation when office changes
-                    setValidatedLocation(null)
-                  }}
+                  onValueChange={handleOfficeChange}
                 >
                   <SelectTrigger className="border-blue-200 focus:border-[#1e40af] dark:border-blue-800">
                     <SelectValue placeholder="Pilih lokasi kantor Anda..." />
@@ -649,7 +686,7 @@ export function EmployeeDashboard() {
                   </SelectContent>
                 </Select>
               )}
-              {selectedOffice && (
+              {selectedOffice && offices.length > 1 && (
                 <div className="flex items-center gap-3 text-xs text-muted-foreground p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
                   <MapPin className="h-3.5 w-3.5 text-[#1e40af] dark:text-blue-400 shrink-0" />
                   <span>
@@ -686,7 +723,7 @@ export function EmployeeDashboard() {
                       : 'text-muted-foreground'
                   }
                 >
-                  Pilih Lokasi Kantor
+                  {offices.length === 1 ? 'Lokasi Otomatis' : 'Pilih Lokasi Kantor'}
                 </span>
                 {selectedOfficeId && (
                   <Badge
@@ -750,7 +787,7 @@ export function EmployeeDashboard() {
                       : 'text-muted-foreground'
                   }
                 >
-                  Validasi Lokasi GPS
+                  {shouldAutoValidate ? 'Validasi Lokasi Otomatis' : 'Validasi Lokasi GPS'}
                 </span>
                 {validatedLocation && (
                   <Badge
@@ -768,10 +805,12 @@ export function EmployeeDashboard() {
               <CameraView onCapture={handleCapture} />
               {selectedOffice ? (
                 <LocationValidator
+                  key={locationValidatorKeyRef.current || selectedOfficeId}
                   onLocationValid={handleLocationValid}
                   officeLat={selectedOffice.latitude}
                   officeLon={selectedOffice.longitude}
                   radiusMeter={selectedOffice.radiusMeter}
+                  autoValidate={shouldAutoValidate}
                 />
               ) : (
                 <Card className="border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-950/30">

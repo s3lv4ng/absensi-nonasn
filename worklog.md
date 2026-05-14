@@ -1,72 +1,62 @@
+# Worklog - Attendance Application
+
 ---
-Task ID: 2
-Agent: Main Agent
-Task: Add 4 new admin features: CRUD Dinas/Cuti/Izin Manual, CRUD Lokasi Kantor, CRUD Jam Kerja (Security/Jaga Malam/Driver/CS), Laporan Pegawai per-individu tgl 1-31
+Task ID: 1
+Agent: Main
+Task: Fix camera not displaying (black screen) in Pegawai attendance
 
 Work Log:
-- Updated Prisma schema: added Office model (multiple office locations), WorkShift model (shift types), added shiftId to User and Attendance, added DINAS type + isManualEntry to LeaveRequest
-- Created /api/offices route (GET/POST/PUT/DELETE) for CRUD lokasi kantor
-- Created /api/shifts route (GET/POST/PUT/DELETE) for CRUD jam kerja with _count.users
-- Updated /api/leaves route: added DINAS type, manual entry by admin (auto-APPROVED), edit/delete support
-- Created /api/employee-report route: individual attendance recap tgl 1-31 with MASUK+PULANG times, leave integration, summary stats
-- Updated types/index.ts: added Office, WorkShift, EmployeeDailyRecord, EmployeeReportData types; updated LeaveType with DINAS; added new AppViews
-- Updated sidebar: added Lokasi Kantor, Jam Kerja, Laporan Pegawai menu items with icons
-- Updated header: added view titles for new pages
-- Updated page.tsx: added routing for admin-offices, admin-shifts, admin-employee-report
-- Created OfficeManagement component: full CRUD with SVG map preview, responsive table/cards
-- Created ShiftManagement component: card-based layout, shift templates (Reguler/Security/Jaga Malam/Driver/CS), color presets, day toggles
-- Updated LeaveManagement component: added manual entry dialog, DINAS type, edit/delete, "Manual" badge
-- Created EmployeeReport component: employee selector, month/year, daily table 1-31 with MASUK+PULANG, summary stats, weekend styling
-- Seeded database: 5 work shifts, 2 office locations
-- All linting passes clean
+- Identified root cause: `<video>` element was conditionally rendered based on `isActive` state, but `startCamera()` tried to set `srcObject` and call `play()` before `isActive` was set to `true`, so `videoRef.current` was `null`
+- Fixed `useCamera` hook: Added `pendingStreamRef` to store stream, added useEffect to attach stream when `isActive` changes, added better error handling for NotAllowedError/NotFoundError, added cleanup of existing streams before starting new one
+- Fixed `CameraView` component: Changed from conditional rendering to always-render-with-visibility-control (using `hidden` class instead of `{isActive && ...}`), added `autoPlay` attribute to video element
 
 Stage Summary:
-- 4 new features fully implemented for admin role
-- Database schema extended with Office, WorkShift models
-- 5 new API routes created, 1 updated
-- 4 new/updated UI components
-- Data seeded: Reguler/Security/Jaga Malam/Driver/CS shifts, 2 office locations
+- Camera should now display properly because the video element is always in the DOM when the component mounts
+- Stream is attached either immediately (if video element exists) or via useEffect when `isActive` changes
+
+---
+Task ID: 2
+Agent: Subagent (full-stack-developer)
+Task: Add API endpoints for employee shift assignment
+
+Work Log:
+- Updated `GET /api/shifts` to support `includeUsers=true` query param
+- Created `POST/DELETE /api/shifts/assign` for assigning/unassigning employees to shifts
+- Created `GET /api/shifts/[id]/users` for getting users assigned to a specific shift
+- Updated `GET /api/users` to include `shiftId` and `shift` relation
+
+Stage Summary:
+- All shift employee assignment APIs are functional
+- Admin-only access required for all endpoints
 
 ---
 Task ID: 3
-Agent: Main Agent
-Task: Add Employee Leave Submission (Pengajuan Dinas/Cuti/Izin) for Pegawai role + Mobile Bottom Navbar for Smartphone/Android
+Agent: Subagent (full-stack-developer)
+Task: Add employee assignment UI to shift management
 
 Work Log:
-- Added 'employee-leaves' to AppView type in types/index.ts
-- Created LeaveSubmission component (src/components/employee/leave-submission.tsx): full form for IZIN/CUTI/SAKIT/DINAS with type selection cards, date range picker, reason textarea, stats cards, filter by status, expandable leave cards, cancel PENDING requests
-- Created MobileNavbar component (src/components/layout/mobile-navbar.tsx): bottom navigation bar with 5 items (Home, Absensi, Pengajuan, Riwayat, Profil for Pegawai; Dashboard, Pegawai, Izin/Cuti, Laporan, Setting for Admin), glassmorphism design, active indicator, safe-area support for iPhone notch
-- Updated sidebar: added "Pengajuan Izin/Cuti" menu item for Pegawai role
-- Updated page.tsx: added employee-leaves routing with LeaveSubmission component
-- Updated app-layout.tsx: integrated MobileNavbar, added bottom padding (pb-20) for mobile to avoid content hidden behind navbar, hidden desktop footer on mobile
-- Updated header.tsx: added 'Pengajuan Izin/Cuti' view title for employee-leaves
-- Updated /api/leaves DELETE handler: employees can now cancel their own PENDING requests (previously admin-only)
-- All linting passes clean
+- Added `users?: User[]` to WorkShift type
+- Added "Pegawai" button on each ShiftCard with UserPlus icon
+- Created EmployeeAssignmentDialog component with two-tab interface
+- Updated fetchShifts to pass `includeUsers=true`
 
 Stage Summary:
-- Employee role now has full leave submission capability (Dinas/Cuti/Izin/Sakit)
-- Mobile bottom navbar added with responsive design (hidden on md+ screens)
-- Leave API updated for employee self-service cancellation
-- 2 new components created, 5 existing files updated
+- Admin can now manage employee assignments to shifts via dialog
+- Two-tab UI: "Ditugaskan" (assigned) and "Tambah Pegawai" (add)
+- Search functionality for finding available employees
 
 ---
 Task ID: 4
-Agent: Main Agent
-Task: Fix camera not showing + Add office location selector for employee attendance
+Agent: Main
+Task: Update employee dashboard with auto-validate GPS and auto-select office
 
 Work Log:
-- Fixed useCamera hook: replaced `stream` useState with `streamRef` useRef to avoid stale closure issue. `stopCamera` no longer depends on state, preventing the effect cleanup from immediately stopping the camera after startCamera
-- Fixed CameraView cleanup useEffect: changed dependency from [stopCamera] to [] (unmount-only) to prevent camera from being stopped on re-render
-- Updated EmployeeDashboard: replaced single OfficeSetting with multiple Office locations from /api/offices
-- Added office location selector (Select component) in attendance dialog with office name, address, radius info
-- Added step-0 in validation checklist: "Pilih Lokasi Kantor" before face/GPS verification
-- LocationValidator only renders after office is selected (shows placeholder otherwise)
-- Attendance POST API updated: accepts optional `officeId`, validates GPS against selected office, falls back to OfficeSetting if no officeId
-- Updated /api/offices GET: admin sees all offices, employees see only active ones
-- All linting passes clean
+- Updated LocationValidator component: Added `autoValidate` prop that triggers GPS validation on mount
+- Updated EmployeeDashboard: Single office auto-selects with "Otomatis" badge, multiple offices show dropdown
+- When office selection changes, LocationValidator remounts with new key for auto-validation
+- Updated attendance API to use user's assigned WorkShift for late determination instead of OfficeSetting
 
 Stage Summary:
-- Camera bug fixed (useRef for stream, unmount-only cleanup)
-- Employee can now choose which office location to validate against
-- Attendance API validates against selected office
-- 5 files modified: useCamera hook, CameraView, EmployeeDashboard, attendance API, offices API
+- When only 1 office exists: auto-selects, auto-validates GPS
+- When multiple offices: dropdown selector, GPS validates after selection
+- Attendance now respects user's assigned shift for late tolerance and start time

@@ -85,6 +85,7 @@ export interface WorkShift {
   createdAt: string
   updatedAt: string
   _count?: { users: number }
+  users?: User[] // included when includeUsers=true
 }
 
 export interface OfficeSetting {
