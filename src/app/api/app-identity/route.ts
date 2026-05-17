@@ -13,6 +13,9 @@ export async function GET() {
       pwaIcon192Path: setting?.pwaIcon192Path || null,
       pwaIcon512Path: setting?.pwaIcon512Path || null,
       officeName: setting?.officeName || 'Kantor Pusat',
+      allowRegistration: setting?.allowRegistration !== null && setting?.allowRegistration !== undefined
+        ? setting.allowRegistration
+        : true,
     })
   } catch (error) {
     console.error('App Identity GET error:', error)
@@ -23,6 +26,7 @@ export async function GET() {
       pwaIcon192Path: null,
       pwaIcon512Path: null,
       officeName: 'Kantor Pusat',
+      allowRegistration: true,
     })
   }
 }

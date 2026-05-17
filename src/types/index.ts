@@ -143,6 +143,7 @@ export interface OfficeSetting {
   faviconPath: string | null
   pwaIcon192Path: string | null
   pwaIcon512Path: string | null
+  allowRegistration: boolean
   createdAt: string
   updatedAt: string
 }

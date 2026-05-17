@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tabs,
@@ -93,6 +94,7 @@ interface IdentityFormData {
   appName: string
   logoPath: string | null
   faviconPath: string | null
+  allowRegistration: boolean
 }
 
 const emptyHolidayForm: HolidayFormData = {
@@ -105,6 +107,7 @@ const emptyIdentityForm: IdentityFormData = {
   appName: 'Sistem Absensi Pegawai',
   logoPath: null,
   faviconPath: null,
+  allowRegistration: true,
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +188,7 @@ export function AdminSettings() {
         appName: (setting as any).appName || 'Sistem Absensi Pegawai',
         logoPath: (setting as any).logoPath || null,
         faviconPath: (setting as any).faviconPath || null,
+        allowRegistration: (setting as any).allowRegistration !== false,
       })
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan')
@@ -283,6 +287,7 @@ export function AdminSettings() {
           appName: identityForm.appName,
           logoPath: identityForm.logoPath,
           faviconPath: identityForm.faviconPath,
+          allowRegistration: identityForm.allowRegistration,
         }),
       })
       if (!res.ok) {
@@ -297,6 +302,7 @@ export function AdminSettings() {
         appName: identityForm.appName,
         logoPath: identityForm.logoPath,
         faviconPath: identityForm.faviconPath,
+        allowRegistration: identityForm.allowRegistration,
       })
       // Update browser favicon, meta tags, and force refresh all icons
       updateAppMeta(identityForm.appName)
@@ -597,6 +603,20 @@ export function AdminSettings() {
                       <p className="text-xs text-muted-foreground">
                         Nama ini akan ditampilkan di header dan judul halaman
                       </p>
+                    </div>
+
+                    {/* Allow Registration Toggle */}
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/50 dark:bg-gray-800/50 border border-blue-100/50 dark:border-blue-900/30">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Izinkan Registrasi</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Tampilkan tombol &quot;Belum punya akun? Daftar&quot; di halaman login
+                        </p>
+                      </div>
+                      <Switch
+                        checked={identityForm.allowRegistration}
+                        onCheckedChange={(checked) => setIdentityForm((f) => ({ ...f, allowRegistration: checked }))}
+                      />
                     </div>
 
                     {/* Save */}

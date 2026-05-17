@@ -61,3 +61,38 @@ Stage Summary:
 - Different people will now have larger Euclidean distances between descriptors
 - Same person will still match during attendance verification (threshold 0.6)
 - Added comprehensive logging for debugging face registration issues
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Add hide/show toggle for "Belum punya akun? Daftar" on Login Page and remove Demo Credentials
+
+Work Log:
+- Added `allowRegistration` boolean field to OfficeSetting model in Prisma schema (default: true)
+- Ran `db:push` to apply schema changes
+- Added `allowRegistration` to TypeScript `OfficeSetting` type
+- Added `allowRegistration` to `AppIdentity` interface in Zustand store
+- Updated `fetchAppIdentity()` in store to read `allowRegistration` from API
+- Updated `/api/app-identity` route to return `allowRegistration`
+- Updated `/api/settings` PUT route to accept and save `allowRegistration`
+- Updated `login-form.tsx`:
+  - Added conditional rendering: register link only shows when `allowRegistration !== false`
+  - Removed entire "Demo Credentials" section
+- Updated `landing-page.tsx`:
+  - Nav bar: "Daftar" button only shows when registration allowed
+  - Hero section: "Buat Akun" button only shows when registration allowed
+  - CTA section: entire "Daftar Sekarang" section only shows when registration allowed
+  - Removed entire "Quick Demo" section with hardcoded demo login buttons
+- Updated `settings.tsx`:
+  - Added `allowRegistration` to `IdentityFormData` interface
+  - Added Switch toggle in "Identitas Aplikasi" tab: "Izinkan Registrasi"
+  - Toggle controls visibility of "Belum punya akun? Daftar" on login page
+  - Saves to database and updates store in real-time
+- Lint passes cleanly, dev server running
+
+Stage Summary:
+- Admin can now toggle "Izinkan Registrasi" in Settings → Identitas Aplikasi
+- When OFF: "Belum punya akun? Daftar" link hidden on login page, "Daftar" buttons hidden on landing page, CTA section hidden
+- When ON (default): all registration UI visible as before
+- Demo Credentials section completely removed from login page
+- Quick Demo section completely removed from landing page

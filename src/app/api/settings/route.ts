@@ -48,6 +48,7 @@ export async function PUT(request: NextRequest) {
       faviconPath,
       pwaIcon192Path,
       pwaIcon512Path,
+      allowRegistration,
     } = body
 
     let setting = await db.officeSetting.findFirst()
@@ -87,6 +88,7 @@ export async function PUT(request: NextRequest) {
           ...(faviconPath !== undefined && { faviconPath }),
           ...(pwaIcon192Path !== undefined && { pwaIcon192Path }),
           ...(pwaIcon512Path !== undefined && { pwaIcon512Path }),
+          ...(allowRegistration !== undefined && { allowRegistration }),
         },
       })
     }

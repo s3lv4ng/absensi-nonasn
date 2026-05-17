@@ -131,6 +131,7 @@ model OfficeSetting {
   faviconPath   String?
   pwaIcon192Path String?
   pwaIcon512Path String?
+  allowRegistration Boolean @default(true) // Show "Belum punya akun? Daftar" on login page
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

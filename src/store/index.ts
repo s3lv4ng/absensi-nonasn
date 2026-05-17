@@ -88,6 +88,7 @@ interface AppIdentity {
   pwaIcon192Path: string | null
   pwaIcon512Path: string | null
   officeName: string
+  allowRegistration: boolean
 }
 
 interface AppStore {
@@ -108,6 +109,7 @@ const defaultIdentity: AppIdentity = {
   pwaIcon192Path: null,
   pwaIcon512Path: null,
   officeName: 'Kantor Pusat',
+  allowRegistration: true,
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -134,6 +136,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             pwaIcon192Path: data.pwaIcon192Path || null,
             pwaIcon512Path: data.pwaIcon512Path || null,
             officeName: data.officeName || defaultIdentity.officeName,
+            allowRegistration: data.allowRegistration !== undefined ? data.allowRegistration : defaultIdentity.allowRegistration,
           },
         })
       }

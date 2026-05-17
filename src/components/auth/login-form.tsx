@@ -19,6 +19,8 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
+  const allowRegistration = appIdentity.allowRegistration !== false
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -174,58 +176,27 @@ export function LoginForm() {
             </motion.div>
           </form>
 
-          {/* Register link */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.3 }}
-            className="mt-6 text-center"
-          >
-            <p className="text-sm text-muted-foreground">
-              Belum punya akun?{' '}
-              <button
-                type="button"
-                onClick={() => setCurrentView('register')}
-                className="text-[#2563eb] dark:text-blue-400 hover:text-[#1e40af] dark:hover:text-blue-300 font-semibold hover:underline transition-colors"
-              >
-                Daftar
-              </button>
-            </p>
-          </motion.div>
+          {/* Register link — controlled by admin setting */}
+          {allowRegistration && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5, duration: 0.3 }}
+              className="mt-6 text-center"
+            >
+              <p className="text-sm text-muted-foreground">
+                Belum punya akun?{' '}
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('register')}
+                  className="text-[#2563eb] dark:text-blue-400 hover:text-[#1e40af] dark:hover:text-blue-300 font-semibold hover:underline transition-colors"
+                >
+                  Daftar
+                </button>
+              </p>
+            </motion.div>
+          )}
 
-          {/* Demo credentials hint */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.3 }}
-            className="mt-6 p-3 rounded-xl bg-[#1e40af]/5 dark:bg-blue-900/20 border border-[#1e40af]/10 dark:border-blue-800/30"
-          >
-            <p className="text-xs text-muted-foreground mb-2 font-medium">Demo Credentials:</p>
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail('admin@absensi.go.id')
-                  setPassword('admin123')
-                }}
-                className="flex items-center gap-2 text-xs text-[#1e40af] dark:text-blue-400 hover:text-[#1e3a8a] dark:hover:text-blue-300 font-mono transition-colors w-full text-left px-1 py-0.5 rounded hover:bg-[#1e40af]/5 dark:hover:bg-blue-800/20"
-              >
-                <span className="size-1.5 rounded-full bg-[#1e40af] dark:bg-blue-400 shrink-0" />
-                admin@absensi.go.id / admin123
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail('ahmad@absensi.go.id')
-                  setPassword('pegawai123')
-                }}
-                className="flex items-center gap-2 text-xs text-[#1e40af] dark:text-blue-400 hover:text-[#1e3a8a] dark:hover:text-blue-300 font-mono transition-colors w-full text-left px-1 py-0.5 rounded hover:bg-[#1e40af]/5 dark:hover:bg-blue-800/20"
-              >
-                <span className="size-1.5 rounded-full bg-[#2563eb] dark:bg-blue-400 shrink-0" />
-                ahmad@absensi.go.id / pegawai123
-              </button>
-            </div>
-          </motion.div>
         </div>
       </motion.div>
     </div>

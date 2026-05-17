@@ -84,6 +84,8 @@ export function LandingPage() {
   const { setCurrentView, appIdentity } = useAppStore()
   const { login } = useAuthStore()
 
+  const allowRegistration = appIdentity.allowRegistration !== false
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950">
       {/* Navigation */}
@@ -115,12 +117,14 @@ export function LandingPage() {
             >
               Masuk
             </Button>
-            <Button
-              onClick={() => setCurrentView('register')}
-              className="bg-gradient-to-r from-[#1e40af] to-[#2563eb] hover:from-[#1e3a8a] hover:to-[#1e40af] text-white shadow-lg shadow-blue-500/25"
-            >
-              Daftar
-            </Button>
+            {allowRegistration && (
+              <Button
+                onClick={() => setCurrentView('register')}
+                className="bg-gradient-to-r from-[#1e40af] to-[#2563eb] hover:from-[#1e3a8a] hover:to-[#1e40af] text-white shadow-lg shadow-blue-500/25"
+              >
+                Daftar
+              </Button>
+            )}
           </div>
         </nav>
       </motion.header>
@@ -178,15 +182,17 @@ export function LandingPage() {
                     Masuk Sekarang
                     <ArrowRight className="ml-2 size-4" />
                   </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => setCurrentView('register')}
-                    className="border-[#1e40af]/20 text-[#1e40af] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 h-12 text-base"
-                  >
-                    Buat Akun
-                    <ChevronRight className="ml-1 size-4" />
-                  </Button>
+                  {allowRegistration && (
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => setCurrentView('register')}
+                      className="border-[#1e40af]/20 text-[#1e40af] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 h-12 text-base"
+                    >
+                      Buat Akun
+                      <ChevronRight className="ml-1 size-4" />
+                    </Button>
+                  )}
                 </motion.div>
 
                 {/* Stats */}
@@ -367,119 +373,54 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <motion.section
-          variants={slideUp}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-50px' }}
-          className="px-4 sm:px-6 py-16"
-        >
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-gradient-to-br from-[#1e40af] to-[#2563eb] rounded-3xl p-8 sm:p-12 text-center text-white shadow-2xl shadow-blue-500/30 relative overflow-hidden">
-              {/* Background decoration */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-white/5 blur-2xl" />
-                <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white/5 blur-2xl" />
-              </div>
+        {/* CTA Section — only shown when registration is allowed */}
+        {allowRegistration && (
+          <motion.section
+            variants={slideUp}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-50px' }}
+            className="px-4 sm:px-6 py-16"
+          >
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-gradient-to-br from-[#1e40af] to-[#2563eb] rounded-3xl p-8 sm:p-12 text-center text-white shadow-2xl shadow-blue-500/30 relative overflow-hidden">
+                {/* Background decoration */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-white/5 blur-2xl" />
+                  <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white/5 blur-2xl" />
+                </div>
 
-              <div className="relative z-10">
-                <Fingerprint className="size-12 mx-auto mb-4 text-blue-200" />
-                <h2 className="text-2xl sm:text-3xl font-bold mb-3">
-                  Mulai Kelola Kehadiran Sekarang
-                </h2>
-                <p className="text-blue-200 max-w-lg mx-auto mb-8">
-                  Daftar gratis dan mulai kelola kehadiran pegawai dengan teknologi modern. Tanpa kartu, tanpa antrian.
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <Button
-                    size="lg"
-                    onClick={() => setCurrentView('register')}
-                    className="bg-white text-[#1e40af] hover:bg-blue-50 shadow-xl h-12 text-base px-8"
-                  >
-                    Daftar Sekarang
-                    <ArrowRight className="ml-2 size-4" />
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => setCurrentView('login')}
-                    className="border-white/30 text-white hover:bg-white/10 h-12 text-base"
-                  >
-                    Sudah Punya Akun
-                  </Button>
+                <div className="relative z-10">
+                  <Fingerprint className="size-12 mx-auto mb-4 text-blue-200" />
+                  <h2 className="text-2xl sm:text-3xl font-bold mb-3">
+                    Mulai Kelola Kehadiran Sekarang
+                  </h2>
+                  <p className="text-blue-200 max-w-lg mx-auto mb-8">
+                    Daftar gratis dan mulai kelola kehadiran pegawai dengan teknologi modern. Tanpa kartu, tanpa antrian.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Button
+                      size="lg"
+                      onClick={() => setCurrentView('register')}
+                      className="bg-white text-[#1e40af] hover:bg-blue-50 shadow-xl h-12 text-base px-8"
+                    >
+                      Daftar Sekarang
+                      <ArrowRight className="ml-2 size-4" />
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => setCurrentView('login')}
+                      className="border-white/30 text-white hover:bg-white/10 h-12 text-base"
+                    >
+                      Sudah Punya Akun
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </motion.section>
-
-        {/* Quick Demo */}
-        <section className="px-4 sm:px-6 pb-16">
-          <div className="max-w-md mx-auto">
-            <motion.div
-              variants={slideUp}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="text-center"
-            >
-              <p className="text-xs text-muted-foreground mb-4">Atau coba demo cepat:</p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    login({
-                      id: '1',
-                      nip: '12345',
-                      nama: 'Admin Demo',
-                      email: 'admin@demo.com',
-                      role: 'ADMIN',
-                      photo: null,
-                      faceDescriptor: null,
-                      unitKerja: 'IT',
-                      jabatan: 'Administrator',
-                      isActive: true,
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                    })
-                    useAppStore.getState().setCurrentView('admin-dashboard')
-                  }}
-                  className="border-[#1e40af]/20 text-[#1e40af] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-                >
-                  <Shield className="size-3.5 mr-1" />
-                  Login Admin
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    login({
-                      id: '2',
-                      nip: '67890',
-                      nama: 'Pegawai Demo',
-                      email: 'pegawai@demo.com',
-                      role: 'PEGAWAI',
-                      photo: null,
-                      faceDescriptor: null,
-                      unitKerja: 'Keuangan',
-                      jabatan: 'Staff',
-                      isActive: true,
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                    })
-                    useAppStore.getState().setCurrentView('employee-dashboard')
-                  }}
-                  className="border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
-                >
-                  <Users className="size-3.5 mr-1" />
-                  Login Pegawai
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        </section>
+          </motion.section>
+        )}
       </main>
 
       {/* Footer */}
