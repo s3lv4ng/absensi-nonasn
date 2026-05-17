@@ -19,6 +19,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
+import { put as vercelPut, del as vercelDel } from '@vercel/blob'
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -105,10 +106,6 @@ async function ensureDir(category: BlobCategory): Promise<string> {
   return dir
 }
 
-/** Get file extension from MIME type */
-function getExtension(mimeType: string): string {
-  return MIME_TO_EXT[mimeType] || 'bin'
-}
 
 /** Validate that a key doesn't contain path traversal */
 function validateKey(key: string): void {
@@ -195,20 +192,6 @@ export async function put(
  * @param key - The filename/key
  * @returns The file data as Buffer, or null if not found
  */
-export async function get(
-  category: BlobCategory,
-  key: string
-): Promise<Buffer | null> {
-  validateKey(key)
-  const filePath = path.join(BLOBS_DIR, category, key)
-
-  try {
-    return await fs.readFile(filePath)
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return null
-    throw err
-  }
-}
 
 /**
  * Delete a file from the blob store.
@@ -217,21 +200,6 @@ export async function get(
  * @param key - The filename/key
  * @returns true if the file was deleted, false if it didn't exist
  */
-export async function del(
-  category: BlobCategory,
-  key: string
-): Promise<boolean> {
-  validateKey(key)
-  const filePath = path.join(BLOBS_DIR, category, key)
-
-  try {
-    await fs.unlink(filePath)
-    return true
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return false
-    throw err
-  }
-}
 
 /**
  * Check if a file exists in the blob store.
@@ -262,9 +230,7 @@ export async function exists(
  * @param key - The filename/key
  * @returns The URL path, e.g., "/api/files/attendance/abc123.jpg"
  */
-export function getUrl(category: BlobCategory, key: string): string {
-  return `/api/files/${category}/${key}`
-}
+
 
 /**
  * Get the content type for a file based on its extension.
@@ -419,13 +385,6 @@ export async function getStats(): Promise<
  * Parse a blob URL path to extract category and key.
  * e.g., "/api/files/attendance/abc123.jpg" → { category: "attendance", key: "abc123.jpg" }
  */
-export function parseBlobUrl(url: string): { category: BlobCategory; key: string } | null {
-  const match = url.match(/^\/api\/files\/([^/]+)\/(.+)$/)
-  if (!match) return null
-  const [, category, key] = match
-  if (!isBlobCategory(category)) return null
-  return { category, key }
-}
 
 function isBlobCategory(value: string): value is BlobCategory {
   return [
@@ -453,6 +412,7 @@ export async function putDataUrl(
     throw new Error('Invalid data URL format')
   }
 
+
   // Parse the data URL
   const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/s)
   if (!matches) {
@@ -472,18 +432,12 @@ export async function putDataUrl(
 /**
  * Check if a string is a blob URL (stored in blob store) vs base64 data URL.
  */
-export function isBlobUrl(value: string | null | undefined): boolean {
-  if (!value) return false
-  return value.startsWith('/api/files/')
-}
+
 
 /**
  * Check if a string is a base64 data URL.
  */
-export function isDataUrl(value: string | null | undefined): boolean {
-  if (!value) return false
-  return value.startsWith('data:')
-}
+
 
 /**
  * Auto-categorize a MIME type into a BlobCategory for the file manager.
@@ -552,4 +506,86 @@ export async function list(category: BlobCategory): Promise<BlobListEntry[]> {
  */
 export function getMaxSize(category: BlobCategory): number {
   return MAX_SIZES[category]
+}
+
+
+
+
+export interface BlobPutOptions {
+  contentType: string
+  filename?: string
+}
+
+export interface BlobResult {
+  key: string
+  url: string
+  size: number
+  category: BlobCategory
+}
+
+
+function getExtension(mimeType: string): string {
+  return MIME_TO_EXT[mimeType] || 'bin'
+}
+
+  
+
+export async function get(
+  category: BlobCategory,
+  key: string
+): Promise<Buffer | null> {
+  try {
+    const response = await fetch(key)
+
+    if (!response.ok) {
+      return null
+    }
+
+    return Buffer.from(await response.arrayBuffer())
+  } catch {
+    return null
+  }
+}
+
+export async function del(
+  category: BlobCategory,
+  key: string
+): Promise<boolean> {
+  try {
+    await vercelDel(key)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function getUrl(category: BlobCategory, key: string): string {
+  return key
+}
+
+export function parseBlobUrl(
+  url: string
+): { category: BlobCategory; key: string } | null {
+  if (!url.startsWith('http')) {
+    return null
+  }
+
+  const parts = url.split('/')
+
+  const category = parts[parts.length - 2] as BlobCategory
+
+  return {
+    category,
+    key: url,
+  }
+}
+
+export function isBlobUrl(value: string | null | undefined): boolean {
+  if (!value) return false
+  return value.startsWith('http')
+}
+
+export function isDataUrl(value: string | null | undefined): boolean {
+  if (!value) return false
+  return value.startsWith('data:')
 }
