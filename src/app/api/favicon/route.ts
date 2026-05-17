@@ -29,35 +29,48 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // If we have a custom favicon, serve it
-    if (faviconPath) {
-      // Check if it's a blob URL (stored in blob store)
-      const blobInfo = parseBlobUrl(faviconPath)
-      if (blobInfo) {
-        const buffer = await get(blobInfo.category, blobInfo.key)
-        if (buffer) {
-          const ext = blobInfo.key.split('.').pop()?.toLowerCase()
-          const mimeMap: Record<string, string> = {
-            svg: 'image/svg+xml',
-            ico: 'image/x-icon',
-            png: 'image/png',
-            jpg: 'image/jpeg',
-            jpeg: 'image/jpeg',
-            webp: 'image/webp',
-          }
-          const contentType = (ext && mimeMap[ext]) || 'image/x-icon'
+// If we have a custom favicon, serve it
+if (faviconPath) {
+  // Check if it's a blob URL (stored in blob store)
+  const blobInfo = parseBlobUrl(faviconPath)
 
-          return new NextResponse(buffer, {
-            headers: {
-              'Content-Type': contentType,
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0',
-              'X-Icon-Source': 'blob-store',
-            },
-          })
-        }
+  if (blobInfo) {
+    const buffer = await get(blobInfo.category, blobInfo.key)
+
+    if (buffer) {
+      const ext = blobInfo.key.split('.').pop()?.toLowerCase()
+
+      const mimeMap: Record<string, string> = {
+        svg: 'image/svg+xml',
+        ico: 'image/x-icon',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        webp: 'image/webp',
       }
+
+      const contentType =
+        (ext && mimeMap[ext]) || 'image/x-icon'
+
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      })
+    }
+  }
+
+  // External public URL
+  if (
+    faviconPath.startsWith('http://') ||
+    faviconPath.startsWith('https://')
+  ) {
+    return NextResponse.redirect(faviconPath)
+  }
+
+  // Local file
+  try {
 
       // Try to read from public directory (legacy support)
       try {
