@@ -386,7 +386,7 @@ function FileCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuItem asChild>
-              <a href={file.url} target="_blank" rel="noopener noreferrer" className="cursor-pointer">
+              <a href={`${file.url}?download=true&filename=${encodeURIComponent(file.filename)}`} rel="noopener noreferrer" className="cursor-pointer">
                 <Download className="size-3.5 mr-2" />
                 Unduh
               </a>
@@ -538,7 +538,7 @@ function FileRow({
           className="h-7 w-7 p-0"
           asChild
         >
-          <a href={file.url} target="_blank" rel="noopener noreferrer">
+          <a href={`${file.url}?download=true&filename=${encodeURIComponent(file.filename)}`} rel="noopener noreferrer">
             <Download className="size-3.5" />
           </a>
         </Button>

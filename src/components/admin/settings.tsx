@@ -1098,6 +1098,11 @@ export function AdminSettings() {
                           attachment: 'Lampiran Izin/Cuti',
                           profile: 'Foto Profil',
                           'pwa-icon': 'Ikon PWA',
+                          documents: 'Dokumen',
+                          images: 'Gambar',
+                          media: 'Media (Video/Audio)',
+                          archive: 'Arsip (ZIP/RAR)',
+                          other: 'Lainnya',
                         }
                         const categoryIcons: Record<string, string> = {
                           logo: '🏷️',
@@ -1107,6 +1112,11 @@ export function AdminSettings() {
                           attachment: '📎',
                           profile: '👤',
                           'pwa-icon': '📱',
+                          documents: '📝',
+                          images: '🖼️',
+                          media: '🎬',
+                          archive: '📦',
+                          other: '📁',
                         }
                         const label = categoryLabels[category] || category
                         const icon = categoryIcons[category] || '📁'

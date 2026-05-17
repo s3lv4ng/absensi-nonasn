@@ -8,6 +8,10 @@ import { get, getContentType, parseBlobUrl, type BlobCategory } from '@/lib/blob
  * e.g., /api/files/attendance/abc123.jpg
  * e.g., /api/files/logo/logo-timestamp.png
  *
+ * Query params:
+ *   - download: If "true", forces download with Content-Disposition: attachment header
+ *   - filename: Override filename for Content-Disposition header (used with download=true)
+ *
  * Sets appropriate Content-Type and caching headers.
  */
 export async function GET(
@@ -35,15 +39,35 @@ export async function GET(
     // Determine content type
     const contentType = getContentType(filename)
 
+    // Check for download query parameter
+    const { searchParams } = new URL(request.url)
+    const isDownload = searchParams.get('download') === 'true'
+    const overrideFilename = searchParams.get('filename') || filename
+
+    // Build headers
+    const headers: Record<string, string> = {
+      'Content-Type': contentType,
+      'Content-Length': buffer.length.toString(),
+    }
+
+    // If download=true, force the browser to download the file
+    if (isDownload) {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = overrideFilename.replace(/[^\w\-. ]/g, '_')
+      headers['Content-Disposition'] = `attachment; filename="${encodeURIComponent(safeFilename)}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`
+      // No cache for download requests to ensure fresh response
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    } else {
+      // For inline display, cache for 7 days (files are immutable once stored with UUID names)
+      const safeFilename = filename.replace(/[^\w\-. ]/g, '_')
+      headers['Content-Disposition'] = `inline; filename="${encodeURIComponent(safeFilename)}"`
+      headers['Cache-Control'] = 'public, max-age=604800, immutable'
+    }
+
     // Create response with proper headers
     const response = new NextResponse(buffer, {
       status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Content-Length': buffer.length.toString(),
-        // Cache for 7 days (files are immutable once stored with UUID names)
-        'Cache-Control': 'public, max-age=604800, immutable',
-      },
+      headers,
     })
 
     return response
