@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 node_modules
 /.pnp
@@ -30,26 +28,50 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env
 .env*
+!.env.example
 
 # vercel
 .vercel
 
+# netlify
+.netlify
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs
+*.log
+server.log
+dev.log
+dev.out.log
+
+# local config
 local-*
 .claude
 .z-ai-config
-*.log
-dev.log
-dev.out.log
+
+# uploads/temp
+tmp
+temp
+uploads
+
+# prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# cache
+.cache
+
+# test files
 test
+tests
+
+# prompt
 prompt
 
-server.log
 # Skills directory
 /skills/
 
