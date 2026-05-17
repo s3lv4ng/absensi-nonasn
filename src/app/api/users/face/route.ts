@@ -3,7 +3,12 @@ import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 import { compressBase64Image } from '@/lib/image-compress'
 
-const MATCH_THRESHOLD = 0.6
+// Threshold for duplicate face prevention during registration.
+// Lower than the attendance matching threshold (0.6) to avoid false positives.
+// Different people's faces typically have distance > 0.5 with good descriptors.
+// Only flag as duplicate if VERY similar (distance < 0.4) to prevent
+// different people from being incorrectly blocked.
+const DUPLICATE_FACE_THRESHOLD = 0.4
 
 function calculateEuclideanDistance(desc1: number[], desc2: number[]): number {
   if (desc1.length !== desc2.length) return Infinity
@@ -89,8 +94,24 @@ export async function PUT(request: NextRequest) {
     }
 
     // Check for duplicate face across other accounts
+    // Uses a stricter threshold (0.4) than attendance matching (0.6)
+    // to avoid blocking different people who happen to have similar descriptors
     if (faceDescriptor) {
-      const newDescriptor = JSON.parse(faceDescriptor) as number[]
+      let newDescriptor: number[]
+      try {
+        newDescriptor = JSON.parse(faceDescriptor) as number[]
+        if (!Array.isArray(newDescriptor) || newDescriptor.length !== 128) {
+          return NextResponse.json(
+            { error: 'Data deskriptor wajah tidak valid. Harap coba lagi.' },
+            { status: 400 }
+          )
+        }
+      } catch {
+        return NextResponse.json(
+          { error: 'Data deskriptor wajah tidak valid. Harap coba lagi.' },
+          { status: 400 }
+        )
+      }
 
       const usersWithFaces = await db.user.findMany({
         where: {
@@ -100,16 +121,42 @@ export async function PUT(request: NextRequest) {
         select: { id: true, nama: true, faceDescriptor: true },
       })
 
+      let closestMatch: { nama: string; distance: number } | null = null
+
       for (const existingUser of usersWithFaces) {
         if (!existingUser.faceDescriptor) continue
-        const existingDescriptor = JSON.parse(existingUser.faceDescriptor) as number[]
-        const distance = calculateEuclideanDistance(newDescriptor, existingDescriptor)
-        if (distance < MATCH_THRESHOLD) {
-          return NextResponse.json(
-            { error: `Wajah ini sudah terdaftar pada akun lain (${existingUser.nama}). Satu wajah hanya boleh didaftarkan pada satu akun.` },
-            { status: 400 }
-          )
+        try {
+          const existingDescriptor = JSON.parse(existingUser.faceDescriptor) as number[]
+          const distance = calculateEuclideanDistance(newDescriptor, existingDescriptor)
+
+          // Log distances for debugging
+          console.log(`[FaceRegistration] Distance vs ${existingUser.nama}: ${distance.toFixed(4)}`)
+
+          // Track closest match for better error messages
+          if (!closestMatch || distance < closestMatch.distance) {
+            closestMatch = { nama: existingUser.nama, distance }
+          }
+
+          // Only block if VERY similar (strict threshold)
+          if (distance < DUPLICATE_FACE_THRESHOLD) {
+            console.warn(`[FaceRegistration] DUPLICATE DETECTED: distance=${distance.toFixed(4)} vs ${existingUser.nama}`)
+            return NextResponse.json(
+              {
+                error: `Wajah ini sudah terdaftar pada akun lain (${existingUser.nama}). Satu wajah hanya boleh didaftarkan pada satu akun.`,
+                distance: Math.round(distance * 100) / 100,
+              },
+              { status: 400 }
+            )
+          }
+        } catch (parseErr) {
+          console.error(`[FaceRegistration] Failed to parse descriptor for user ${existingUser.id}:`, parseErr)
+          continue
         }
+      }
+
+      // Log if close but not blocked
+      if (closestMatch && closestMatch.distance < 0.6) {
+        console.warn(`[FaceRegistration] Close match but not blocked: distance=${closestMatch.distance.toFixed(4)} vs ${closestMatch.nama}`)
       }
     }
 

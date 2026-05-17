@@ -94,10 +94,12 @@ export async function detectFace(
     const faceapi = await getFaceApi()
 
     // Detect face with landmarks and descriptor
+    // Using inputSize: 512 for higher quality descriptors (better discriminability)
+    // scoreThreshold: 0.6 ensures only high-confidence detections are used
     const detection = await faceapi
       .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions({
-        inputSize: 320,
-        scoreThreshold: 0.5,
+        inputSize: 512,
+        scoreThreshold: 0.6,
       }))
       .withFaceLandmarks()
       .withFaceDescriptor()
@@ -309,7 +311,7 @@ export async function checkFaceDetected(
     const detection = await faceapi.detectSingleFace(
       input,
       new faceapi.TinyFaceDetectorOptions({
-        inputSize: 224,
+        inputSize: 320,
         scoreThreshold: 0.5,
       })
     )

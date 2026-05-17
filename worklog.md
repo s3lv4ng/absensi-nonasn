@@ -30,3 +30,34 @@ Stage Summary:
 - Delete: soft delete with admin tracking, can be toggled visible/hidden
 - Admin markers: visible badges showing who edited/deleted/added attendance, with bukti dukung indicator
 - All images compressed for database efficiency
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix face registration bug - different users being blocked as duplicates
+
+Work Log:
+- Identified root cause: duplicate face prevention threshold was 0.6 (same as attendance matching), causing false positives where different people's faces were incorrectly matched as duplicates
+- The TinyFaceDetector with inputSize: 320 produces less discriminative descriptors, making different faces appear closer in distance
+- Fix 1: Lowered DUPLICATE_FACE_THRESHOLD from 0.6 to 0.4 in `/src/app/api/users/face/route.ts`
+  - Added descriptor validation (check for 128-length array)
+  - Added comprehensive distance logging for debugging
+  - Added closest-match tracking with warning for near-matches
+  - Better error handling for descriptor parsing errors
+- Fix 2: Increased `inputSize` from 320 to 512 in `detectFace()` function in `/src/lib/face-recognition.ts`
+  - Larger inputSize produces higher quality descriptors with better discriminability
+  - Same person's descriptors get smaller distances (more accurate matching)
+  - Different people's descriptors get larger distances (less false positives)
+- Fix 3: Increased `scoreThreshold` from 0.5 to 0.6 for descriptor generation
+  - Ensures only high-confidence face detections produce descriptors
+  - Low-quality detections (blurry, partially occluded) are rejected
+- Fix 4: Increased `checkFaceDetected` inputSize from 224 to 320 for better live preview
+- Attendance verification threshold stays at 0.6 (appropriate for positive matching)
+- Lint passes cleanly
+
+Stage Summary:
+- Duplicate face prevention threshold lowered from 0.6 → 0.4 (only truly identical faces blocked)
+- Face descriptor quality improved: inputSize 320→512, scoreThreshold 0.5→0.6
+- Different people will now have larger Euclidean distances between descriptors
+- Same person will still match during attendance verification (threshold 0.6)
+- Added comprehensive logging for debugging face registration issues
