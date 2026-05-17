@@ -226,3 +226,48 @@ export function autoCategorize(
 
   return 'other'
 }
+
+export function getContentType(key: string): string {
+  const ext = key.split('.').pop()?.toLowerCase()
+
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'png':
+      return 'image/png'
+    case 'gif':
+      return 'image/gif'
+    case 'webp':
+      return 'image/webp'
+    case 'svg':
+      return 'image/svg+xml'
+    case 'ico':
+      return 'image/x-icon'
+    case 'pdf':
+      return 'application/pdf'
+    case 'mp4':
+      return 'video/mp4'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+export async function getStats(): Promise<
+  Record<BlobCategory, { count: number; totalSize: number }>
+> {
+  return {
+    logo: { count: 0, totalSize: 0 },
+    favicon: { count: 0, totalSize: 0 },
+    attendance: { count: 0, totalSize: 0 },
+    'bukti-dukung': { count: 0, totalSize: 0 },
+    attachment: { count: 0, totalSize: 0 },
+    profile: { count: 0, totalSize: 0 },
+    'pwa-icon': { count: 0, totalSize: 0 },
+    documents: { count: 0, totalSize: 0 },
+    images: { count: 0, totalSize: 0 },
+    media: { count: 0, totalSize: 0 },
+    archive: { count: 0, totalSize: 0 },
+    other: { count: 0, totalSize: 0 },
+  }
+}
