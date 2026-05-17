@@ -35,6 +35,11 @@ export type BlobCategory =
   | 'attachment'
   | 'profile'
   | 'pwa-icon'
+  | 'documents'
+  | 'images'
+  | 'media'
+  | 'archive'
+  | 'other'
 
 /** Maximum file sizes per category (in bytes) */
 const MAX_SIZES: Record<BlobCategory, number> = {
@@ -45,6 +50,11 @@ const MAX_SIZES: Record<BlobCategory, number> = {
   attachment: 15 * 1024 * 1024,  // 15 MB
   profile: 5 * 1024 * 1024,      // 5 MB
   'pwa-icon': 2 * 1024 * 1024,   // 2 MB
+  documents: 25 * 1024 * 1024,   // 25 MB
+  images: 15 * 1024 * 1024,      // 15 MB
+  media: 50 * 1024 * 1024,       // 50 MB
+  archive: 50 * 1024 * 1024,     // 50 MB
+  other: 25 * 1024 * 1024,       // 25 MB
 }
 
 /** MIME type to extension mapping */
@@ -56,7 +66,32 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/svg+xml': 'svg',
   'image/bmp': 'bmp',
   'image/x-icon': 'ico',
+  'image/tiff': 'tiff',
   'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/zip': 'zip',
+  'application/x-rar-compressed': 'rar',
+  'application/x-7z-compressed': '7z',
+  'application/gzip': 'gz',
+  'application/x-tar': 'tar',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/x-msvideo': 'avi',
+  'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/webm': 'weba',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'text/html': 'html',
+  'application/json': 'json',
+  'application/xml': 'xml',
 }
 
 // ---------------------------------------------------------------------------
@@ -255,8 +290,59 @@ export function getContentType(key: string): string {
       return 'image/x-icon'
     case 'bmp':
       return 'image/bmp'
+    case 'tiff':
+    case 'tif':
+      return 'image/tiff'
     case 'pdf':
       return 'application/pdf'
+    case 'doc':
+      return 'application/msword'
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    case 'xls':
+      return 'application/vnd.ms-excel'
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    case 'ppt':
+      return 'application/vnd.ms-powerpoint'
+    case 'pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    case 'zip':
+      return 'application/zip'
+    case 'rar':
+      return 'application/x-rar-compressed'
+    case '7z':
+      return 'application/x-7z-compressed'
+    case 'gz':
+    case 'gzip':
+      return 'application/gzip'
+    case 'tar':
+      return 'application/x-tar'
+    case 'mp4':
+      return 'video/mp4'
+    case 'webm':
+      return 'video/webm'
+    case 'avi':
+      return 'video/x-msvideo'
+    case 'mov':
+      return 'video/quicktime'
+    case 'mp3':
+      return 'audio/mpeg'
+    case 'wav':
+      return 'audio/wav'
+    case 'ogg':
+      return 'audio/ogg'
+    case 'txt':
+      return 'text/plain'
+    case 'csv':
+      return 'text/csv'
+    case 'html':
+    case 'htm':
+      return 'text/html'
+    case 'json':
+      return 'application/json'
+    case 'xml':
+      return 'application/xml'
     default:
       return 'application/octet-stream'
   }
@@ -298,6 +384,7 @@ export async function getStats(): Promise<
   const categories: BlobCategory[] = [
     'logo', 'favicon', 'attendance', 'bukti-dukung',
     'attachment', 'profile', 'pwa-icon',
+    'documents', 'images', 'media', 'archive', 'other',
   ]
 
   const stats: Record<string, { count: number; totalSize: number }> = {}
@@ -344,6 +431,7 @@ function isBlobCategory(value: string): value is BlobCategory {
   return [
     'logo', 'favicon', 'attendance', 'bukti-dukung',
     'attachment', 'profile', 'pwa-icon',
+    'documents', 'images', 'media', 'archive', 'other',
   ].includes(value)
 }
 
@@ -395,4 +483,73 @@ export function isBlobUrl(value: string | null | undefined): boolean {
 export function isDataUrl(value: string | null | undefined): boolean {
   if (!value) return false
   return value.startsWith('data:')
+}
+
+/**
+ * Auto-categorize a MIME type into a BlobCategory for the file manager.
+ * Maps MIME types to the general-purpose categories: documents, images, media, archive, other.
+ */
+export function autoCategorize(mimeType: string): BlobCategory {
+  if (mimeType.startsWith('image/')) return 'images'
+  if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) return 'media'
+  if (
+    mimeType === 'application/pdf' ||
+    mimeType === 'application/msword' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType === 'application/vnd.ms-powerpoint' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    mimeType.startsWith('text/')
+  ) return 'documents'
+  if (
+    mimeType === 'application/zip' ||
+    mimeType === 'application/x-rar-compressed' ||
+    mimeType === 'application/x-7z-compressed' ||
+    mimeType === 'application/gzip' ||
+    mimeType === 'application/x-tar'
+  ) return 'archive'
+  return 'other'
+}
+
+/**
+ * List all files in a category with their metadata.
+ */
+export interface BlobListEntry {
+  key: string
+  url: string
+  size: number
+  createdAt: Date
+}
+
+export async function list(category: BlobCategory): Promise<BlobListEntry[]> {
+  const dir = path.join(BLOBS_DIR, category)
+  try {
+    const files = await fs.readdir(dir)
+    const entries: BlobListEntry[] = []
+    for (const file of files) {
+      try {
+        const stat = await fs.stat(path.join(dir, file))
+        entries.push({
+          key: file,
+          url: `/api/files/${category}/${file}`,
+          size: stat.size,
+          createdAt: stat.mtime,
+        })
+      } catch {
+        // Ignore individual file errors
+      }
+    }
+    return entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return []
+    throw err
+  }
+}
+
+/**
+ * Get the maximum allowed size for a category.
+ */
+export function getMaxSize(category: BlobCategory): number {
+  return MAX_SIZES[category]
 }

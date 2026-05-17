@@ -169,3 +169,62 @@ Stage Summary:
 - Backward compatible: existing base64 data in DB still works, new uploads go to blob store
 - Easy deployment: no cloud storage configuration needed, just deploy and it works
 - `blobs/` directory auto-created on first upload, ignored by git
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Add file upload/photo feature with Blob Store support for easy zero-config deployment
+
+Work Log:
+- Updated Prisma schema: added FileUpload model with fields (id, filename, storedName, category, mimeType, size, url, uploadedBy, description, isDeleted, deletedAt, createdAt, updatedAt) and User relation
+- Added `fileUploads` relation to User model
+- Ran `db:push` to apply schema changes successfully
+- Enhanced `src/lib/blob-store.ts`:
+  - Added new categories: 'documents', 'images', 'media', 'archive', 'other'
+  - Added per-category size limits (documents: 25MB, images: 15MB, media: 50MB, archive: 50MB, other: 25MB)
+  - Added extended MIME type mapping for office docs, video, audio, archives, text formats
+  - Added `autoCategorize(mimeType)` function to automatically classify files into categories
+  - Added `list(category)` function to list files with metadata
+  - Added `getMaxSize(category)` function
+  - Extended `getContentType()` to handle all new file extensions
+- Created `src/app/api/file-uploads/route.ts` — Full CRUD API:
+  - GET: List files with pagination, category filter, search filter
+  - POST: Upload one or more files with auto-categorization, image compression, DB metadata tracking
+  - DELETE: Delete files (soft delete + physical blob deletion), admin-only
+- Updated `src/app/api/blob-stats/route.ts`: Changed from admin-only to authenticated users
+- Updated `src/app/api/upload/route.ts`: Added new categories to valid categories list
+- Updated `src/types/index.ts`:
+  - Added 'admin-file-manager' to AppView type
+  - Added FileUploadItem interface
+- Created `src/components/admin/file-management.tsx` — Complete file management UI:
+  - Storage stats cards (5 category cards: Documents, Images, Media, Archive, Other)
+  - Visual storage breakdown bar
+  - Drag-and-drop upload zone with multi-file support
+  - File browser with grid/list view toggle
+  - Search and category filter
+  - File selection with bulk delete
+  - Pagination
+  - Delete confirmation dialogs
+  - Responsive design with proper icons per file type
+- Updated `src/components/layout/sidebar.tsx`:
+  - Added Cloud icon import
+  - Added storageItems nav group with "Kelola File & Blob" menu item
+  - Added "Penyimpanan" section between Reports and Settings
+- Updated `src/components/layout/mobile-navbar.tsx`:
+  - Added Cloud icon import
+  - Replaced "Rekap" with "File" menu item pointing to admin-file-manager
+- Updated `src/app/page.tsx`:
+  - Added FileManagement import
+  - Added 'admin-file-manager' case in ViewRenderer
+- Lint passes cleanly, dev server running
+
+Stage Summary:
+- Complete file upload & management feature with Blob Store support
+- Zero-config deployment: files stored in local `blobs/` directory, no external storage needed
+- Auto-categorization: files automatically sorted into documents, images, media, archive, other
+- Full database tracking: all uploads recorded with metadata, uploader info, timestamps
+- Drag-and-drop upload: supports multiple files, validates size limits
+- Image compression: uploaded images auto-compressed for storage efficiency
+- File management UI: grid/list view, search, filter by category, bulk operations
+- Storage statistics: real-time stats with visual breakdown bar
+- Accessible via admin sidebar "Kelola File & Blob" and mobile "File" tab

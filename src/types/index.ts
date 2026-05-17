@@ -26,6 +26,7 @@ export type AppView =
   | 'admin-settings'
   | 'admin-leaves'
   | 'admin-rekap-absen'
+  | 'admin-file-manager'
 
 export interface UnitKerja {
   id: string
@@ -262,6 +263,27 @@ export interface LeaveTypeCategory {
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface FileUploadItem {
+  id: string
+  filename: string
+  storedName: string
+  category: string
+  mimeType: string
+  size: number
+  url: string
+  uploadedBy: string | null
+  description: string | null
+  isDeleted: boolean
+  deletedAt: string | null
+  createdAt: string
+  updatedAt: string
+  uploader?: {
+    id: string
+    nama: string
+    email: string
+  }
 }
 
 export interface EmployeeMonitorEntry {

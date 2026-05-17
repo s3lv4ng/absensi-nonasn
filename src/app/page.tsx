@@ -19,6 +19,7 @@ import { AttendanceMonitoring } from '@/components/admin/attendance-monitoring'
 import { AdminSettings } from '@/components/admin/settings'
 import { LeaveManagement } from '@/components/admin/leave-management'
 import { RekapAbsen } from '@/components/admin/rekap-absen'
+import { FileManagement } from '@/components/admin/file-management'
 
 function ViewRenderer() {
   const { currentView } = useAppStore()
@@ -42,6 +43,8 @@ function ViewRenderer() {
       return <LeaveManagement />
     case 'admin-rekap-absen':
       return <RekapAbsen />
+    case 'admin-file-manager':
+      return <FileManagement />
     case 'employee-dashboard':
       return <EmployeeDashboard />
     case 'employee-history':

@@ -3,13 +3,14 @@ import { getAuthUser } from '@/lib/auth'
 import { getStats } from '@/lib/blob-store'
 
 /**
- * GET /api/blob-stats — Get blob storage statistics (admin only).
+ * GET /api/blob-stats — Get blob storage statistics.
+ * Admin sees all, authenticated users see basic stats.
  */
 export async function GET(request: NextRequest) {
   try {
     const authUser = await getAuthUser()
-    if (!authUser || authUser.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
+    if (!authUser) {
+      return NextResponse.json({ error: 'Tidak terautentikasi' }, { status: 401 })
     }
 
     const stats = await getStats()

@@ -30,6 +30,7 @@ model User {
 
   attendances   Attendance[]
   leaveRequests LeaveRequest[]
+  fileUploads   FileUpload[]
   shift         WorkShift? @relation(fields: [shiftId], references: [id])
   unitKerjaRef  UnitKerja? @relation(fields: [unitKerjaId], references: [id])
   jabatanRef    Jabatan? @relation(fields: [jabatanId], references: [id])
@@ -192,4 +193,28 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+}
+
+model FileUpload {
+  id          String   @id @default(cuid())
+  filename    String   // Original filename from the user
+  storedName  String   // Generated storage key (UUID-based)
+  category    String   // Blob category: "documents" | "images" | "media" | "archive" | "other"
+  mimeType    String   // MIME type
+  size        Int      // Size in bytes
+  url         String   // Serving URL path: /api/files/documents/xxx.jpg
+  uploadedBy  String?  // User ID who uploaded
+  description String?  // Optional description/tag
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  uploader    User?    @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([uploadedBy])
+  @@index([createdAt])
+  @@index([isDeleted])
+  @@index([mimeType])
 }

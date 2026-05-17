@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     const validCategories: BlobCategory[] = [
       'logo', 'favicon', 'attachment', 'profile',
       'attendance', 'bukti-dukung', 'pwa-icon',
+      'documents', 'images', 'media', 'archive', 'other',
     ]
     if (!validCategories.includes(type as BlobCategory)) {
       return NextResponse.json(

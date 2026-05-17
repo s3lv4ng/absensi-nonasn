@@ -12,6 +12,7 @@ import {
   Fingerprint,
   Eye,
   TableProperties,
+  Cloud,
 } from 'lucide-react'
 import { useAuthStore, useAppStore } from '@/store'
 import type { AppView } from '@/types'
@@ -79,6 +80,14 @@ const reportItems: NavItem[] = [
     title: 'Cetak Rekap Absen',
     view: 'admin-rekap-absen',
     icon: TableProperties,
+  },
+]
+
+const storageItems: NavItem[] = [
+  {
+    title: 'Kelola File & Blob',
+    view: 'admin-file-manager',
+    icon: Cloud,
   },
 ]
 
@@ -267,6 +276,27 @@ export function AppSidebar() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {reportItems.map((item) => (
+                      <NavItemRenderer
+                        key={item.view}
+                        item={item}
+                        isActive={currentView === item.view}
+                        onClick={() => handleNavClick(item.view)}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              <SidebarSeparator className="bg-blue-100/50 dark:bg-blue-900/30" />
+
+              {/* Storage */}
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-[#1e40af]/70 dark:text-blue-400/70">
+                  Penyimpanan
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {storageItems.map((item) => (
                       <NavItemRenderer
                         key={item.view}
                         item={item}

@@ -9,6 +9,7 @@ import {
   History,
   UserCircle,
   Eye,
+  Cloud,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -63,9 +64,9 @@ const adminNavItems: NavItem[] = [
     icon: ClipboardCheck,
   },
   {
-    title: 'Rekap',
-    view: 'admin-rekap-absen',
-    icon: History,
+    title: 'File',
+    view: 'admin-file-manager',
+    icon: Cloud,
   },
   {
     title: 'Setting',
