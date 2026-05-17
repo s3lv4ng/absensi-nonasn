@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 import { createJakartaDate } from '@/lib/timezone'
-import { compressBase64Image } from '@/lib/image-compress'
+import { putDataUrl, isDataUrl } from '@/lib/blob-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,17 +70,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Compress bukti dukung image before storing
-    let compressedBukti = buktiDukung || null
-    if (compressedBukti) {
+    // Store bukti dukung in blob store (not as base64 in database)
+    let buktiDukungUrl: string | null = buktiDukung || null
+    if (buktiDukung && isDataUrl(buktiDukung)) {
       try {
-        compressedBukti = await compressBase64Image(compressedBukti, {
-          maxWidth: 640,
-          maxHeight: 480,
-          quality: 60,
-        })
-      } catch (compressErr) {
-        console.error('Bukti dukung compression failed:', compressErr)
+        const blobResult = await putDataUrl('bukti-dukung', buktiDukung)
+        buktiDukungUrl = blobResult.url
+      } catch (blobErr) {
+        console.error('Bukti dukung blob store save failed:', blobErr)
+        // Fallback: keep base64 in DB
+        buktiDukungUrl = buktiDukung
       }
     }
 
@@ -97,7 +96,7 @@ export async function POST(request: NextRequest) {
         shiftId: shiftId || employee.shiftId || null,
         isManual: true,
         manualBy: authUser.userId,
-        buktiDukung: compressedBukti,
+        buktiDukung: buktiDukungUrl,
         createdAt,
       },
       include: {

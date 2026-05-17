@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { readFile, stat } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import path from 'path'
+import { get, parseBlobUrl } from '@/lib/blob-store'
 
 // Cache the favicon for a short time to avoid hitting DB on every request
 let cachedFavicon: { path: string; timestamp: number } | null = null
@@ -30,6 +31,35 @@ export async function GET(request: NextRequest) {
 
     // If we have a custom favicon, serve it
     if (faviconPath) {
+      // Check if it's a blob URL (stored in blob store)
+      const blobInfo = parseBlobUrl(faviconPath)
+      if (blobInfo) {
+        const buffer = await get(blobInfo.category, blobInfo.key)
+        if (buffer) {
+          const ext = blobInfo.key.split('.').pop()?.toLowerCase()
+          const mimeMap: Record<string, string> = {
+            svg: 'image/svg+xml',
+            ico: 'image/x-icon',
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            webp: 'image/webp',
+          }
+          const contentType = (ext && mimeMap[ext]) || 'image/x-icon'
+
+          return new NextResponse(buffer, {
+            headers: {
+              'Content-Type': contentType,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+              'X-Icon-Source': 'blob-store',
+            },
+          })
+        }
+      }
+
+      // Try to read from public directory (legacy support)
       try {
         const filePath = path.join(process.cwd(), 'public', faviconPath)
         const fileBuffer = await readFile(filePath)

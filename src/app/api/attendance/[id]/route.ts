@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
-import { compressBase64Image } from '@/lib/image-compress'
+import { putDataUrl, isDataUrl } from '@/lib/blob-store'
 
 // ---------------------------------------------------------------------------
 // PATCH /api/attendance/[id] — Edit attendance (admin only)
@@ -66,16 +66,18 @@ export async function PATCH(
       updateData.editReason = editReason
     }
 
-    // Compress bukti dukung image before storing
+    // Store bukti dukung in blob store (not as base64 in database)
     if (buktiDukung) {
-      try {
-        updateData.buktiDukung = await compressBase64Image(buktiDukung, {
-          maxWidth: 640,
-          maxHeight: 480,
-          quality: 60,
-        })
-      } catch (compressErr) {
-        console.error('Bukti dukung compression failed:', compressErr)
+      if (isDataUrl(buktiDukung)) {
+        try {
+          const blobResult = await putDataUrl('bukti-dukung', buktiDukung)
+          updateData.buktiDukung = blobResult.url
+        } catch (blobErr) {
+          console.error('Bukti dukung blob store save failed:', blobErr)
+          updateData.buktiDukung = buktiDukung // Fallback to base64
+        }
+      } else {
+        // Already a URL
         updateData.buktiDukung = buktiDukung
       }
     }

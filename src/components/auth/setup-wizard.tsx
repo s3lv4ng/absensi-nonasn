@@ -1103,7 +1103,7 @@ function StepIdentity({
       }
 
       const data = await res.json()
-      onChangeAppData({ ...appData, logoPath: data.path })
+      onChangeAppData({ ...appData, logoPath: data.url || data.path })
       toast.success('Logo berhasil diunggah')
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Gagal mengunggah logo')
@@ -1134,7 +1134,7 @@ function StepIdentity({
       }
 
       const data = await res.json()
-      onChangeAppData({ ...appData, faviconPath: data.path })
+      onChangeAppData({ ...appData, faviconPath: data.url || data.path })
       toast.success('Favicon berhasil diunggah')
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Gagal mengunggah favicon')

@@ -96,3 +96,76 @@ Stage Summary:
 - When ON (default): all registration UI visible as before
 - Demo Credentials section completely removed from login page
 - Quick Demo section completely removed from landing page
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Create Blob Storage system for file uploads (easy deploy, no extra config) + Hide/show registration link + Remove Demo Credentials
+
+Work Log:
+- Verified that "Belum punya akun? Daftar" hide/show is ALREADY implemented (allowRegistration toggle exists in OfficeSetting, Settings page, Login form, Landing page)
+- Verified that Demo Credentials section does NOT exist in current code (already removed or never existed)
+- Created `src/lib/blob-store.ts` — Full blob storage library with local filesystem implementation:
+  - `put(category, buffer, options)` — Store a file with auto-generated UUID filename
+  - `get(category, key)` — Retrieve a file as Buffer
+  - `del(category, key)` — Delete a file
+  - `exists(category, key)` — Check if file exists
+  - `getUrl(category, key)` — Get URL path for serving
+  - `putDataUrl(category, dataUrl, options)` — Store base64 data URL directly
+  - `parseBlobUrl(url)` — Parse blob URL to extract category and key
+  - `isBlobUrl()` / `isDataUrl()` — Check value type
+  - `getStats()` — Get storage statistics per category
+  - `deleteCategory()` — Delete all files in a category
+  - Categories: logo, favicon, attendance, bukti-dukung, attachment, profile, pwa-icon
+  - Per-category file size limits
+  - Path traversal protection
+- Created `src/app/api/upload/route.ts` — Critical missing upload API route:
+  - Accepts FormData with `file` and `type` fields
+  - Validates file type and category
+  - Compresses images per category (attendance: 320x240 q60, bukti-dukung: 640x480 q60, profile: 320x320 q70, attachment: 1280x1280 q75)
+  - Generates PWA icons (192x192, 512x512) for logo/favicon uploads
+  - Returns { url, path, pwaIcon192?, pwaIcon512? }
+- Created `src/app/api/files/[...path]/route.ts` — File serving API route:
+  - GET: Serves files from blob store with proper Content-Type and caching headers (7 days immutable)
+  - DELETE: Admin-only file deletion
+- Created `src/app/api/blob-stats/route.ts` — Storage statistics API (admin only)
+- Created `src/lib/image-resolver.ts` — Utility for resolving image paths (handles both blob URLs and base64 data URLs)
+- Updated `src/app/api/attendance/route.ts` POST:
+  - Changed from storing base64 in DB to storing in blob store
+  - Attendance photos now saved as `/api/files/attendance/{uuid}.jpg`
+  - Falls back to base64 in DB if blob store fails
+- Updated `src/app/api/attendance/manual/route.ts` POST:
+  - Bukti dukung now stored in blob store instead of base64 in DB
+  - Uses `putDataUrl()` for easy base64 → blob conversion
+  - Falls back to base64 if blob store fails
+- Updated `src/app/api/attendance/[id]/route.ts` PATCH:
+  - Bukti dukung now stored in blob store instead of base64 in DB
+  - Backward compatible: handles both base64 data URLs and blob URLs
+- Updated `src/app/api/favicon/route.ts`:
+  - Now supports blob URLs (checks `parseBlobUrl()` first)
+  - Falls back to reading from public/ directory (legacy support)
+- Updated `src/app/api/pwa-icon/[size]/route.ts`:
+  - Now supports blob URLs (checks `parseBlobUrl()` first)
+  - Falls back to reading from public/ directory (legacy support)
+- Updated `src/components/admin/settings.tsx`:
+  - Added `HardDrive` icon import
+  - Added blob storage stats state and fetchBlobStats function
+  - Added "Penyimpanan" tab with storage statistics UI (total files, total size, category breakdown)
+  - Logo/favicon upload now saves PWA icon paths to settings
+  - Upload response now properly handles `data.url` format
+- Updated `src/components/auth/setup-wizard.tsx`:
+  - Logo/favicon upload now handles `data.url` response format
+- Added `blobs/` to `.gitignore`
+- All frontend components that display images (attendance photos, bukti dukung, user photos) work with both base64 and blob URLs transparently (no changes needed since `<img src="">` handles both)
+- Lint passes cleanly, dev server running
+
+Stage Summary:
+- Complete Blob Storage system implemented with zero-config local filesystem storage
+- Critical missing `/api/upload` route finally created — fixes logo/favicon/leave attachment uploads
+- File serving route `/api/files/[category]/[filename]` with caching headers
+- Attendance photos migrated from base64-in-DB to blob store (with fallback)
+- Bukti dukung migrated from base64-in-DB to blob store (with fallback)
+- Admin Storage tab shows real-time storage statistics per category
+- Backward compatible: existing base64 data in DB still works, new uploads go to blob store
+- Easy deployment: no cloud storage configuration needed, just deploy and it works
+- `blobs/` directory auto-created on first upload, ignored by git

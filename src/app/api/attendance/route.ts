@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUser } from '@/lib/auth'
 import { calculateAttendanceTiming } from '@/lib/attendance-utils'
 import { getJakartaTime, createJakartaDate } from '@/lib/timezone'
-import { compressBase64Image } from '@/lib/image-compress'
+import { putDataUrl, isDataUrl } from '@/lib/blob-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -214,20 +214,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Compress attendance photo to save database storage
-    // Resize to 320x240, JPEG quality 60 (~5-15KB vs ~50-100KB raw)
-    let compressedPhoto = photo || null
-    if (compressedPhoto) {
+    // Store attendance photo in blob store (not in database as base64)
+    // This keeps the database small and makes deployment easy
+    let photoUrl: string | null = null
+    if (photo && isDataUrl(photo)) {
       try {
-        compressedPhoto = await compressBase64Image(compressedPhoto, {
-          maxWidth: 320,
-          maxHeight: 240,
-          quality: 60,
-        })
-      } catch (compressErr) {
-        console.error('Photo compression failed, storing original:', compressErr)
-        // Keep original if compression fails
+        const blobResult = await putDataUrl('attendance', photo)
+        photoUrl = blobResult.url
+      } catch (blobErr) {
+        console.error('Blob store save failed, storing as base64 fallback:', blobErr)
+        // Fallback: keep the base64 in DB if blob store fails
+        photoUrl = photo
       }
+    } else if (photo) {
+      // Already a URL or path
+      photoUrl = photo
     }
 
     const attendance = await db.attendance.create({
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
         type,
         latitude,
         longitude,
-        photo: compressedPhoto,
+        photo: photoUrl,
         confidence: confidence || 0,
         status: attendanceStatus,
         shiftId: shiftId,

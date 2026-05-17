@@ -17,6 +17,7 @@ import {
   Upload,
   ImagePlus,
   X,
+  HardDrive,
 } from 'lucide-react'
 
 import { useAppStore } from '@/store'
@@ -167,6 +168,13 @@ export function AdminSettings() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [faviconFile, setFaviconFile] = useState<File | null>(null)
 
+  // Blob storage stats
+  const [blobStats, setBlobStats] = useState<{
+    categories: Record<string, { count: number; totalSize: number }>
+    total: { count: number; size: number }
+  } | null>(null)
+  const [isLoadingBlobStats, setIsLoadingBlobStats] = useState(false)
+
   // ---- Fetch settings ----
   const fetchSettings = useCallback(async () => {
     try {
@@ -209,6 +217,21 @@ export function AdminSettings() {
       setHolidays(data.holidays || [])
     } catch {
       // Silent fail
+    }
+  }, [])
+
+  // ---- Fetch blob storage stats ----
+  const fetchBlobStats = useCallback(async () => {
+    try {
+      setIsLoadingBlobStats(true)
+      const res = await fetch('/api/blob-stats')
+      if (!res.ok) return
+      const data = await res.json()
+      setBlobStats(data)
+    } catch {
+      // Silent fail
+    } finally {
+      setIsLoadingBlobStats(false)
     }
   }, [])
 
@@ -336,11 +359,11 @@ export function AdminSettings() {
         throw new Error(body.error || 'Gagal mengunggah logo')
       }
       const data = await res.json()
-      const newLogoPath = data.path || data.filePath || null
+      const newLogoPath = data.url || data.path || data.filePath || null
       setIdentityForm((f) => ({ ...f, logoPath: newLogoPath }))
       setLogoFile(null)
       if (logoInputRef.current) logoInputRef.current.value = ''
-      // Save settings with the new logo path
+      // Save settings with the new logo path + PWA icon paths
       const saveRes = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -348,6 +371,8 @@ export function AdminSettings() {
           appName: identityForm.appName,
           logoPath: newLogoPath,
           faviconPath: identityForm.faviconPath,
+          pwaIcon192Path: data.pwaIcon192 || null,
+          pwaIcon512Path: data.pwaIcon512 || null,
         }),
       })
       if (saveRes.ok) {
@@ -395,11 +420,11 @@ export function AdminSettings() {
         throw new Error(body.error || 'Gagal mengunggah favicon')
       }
       const data = await res.json()
-      const newFaviconPath = data.path || data.filePath || null
+      const newFaviconPath = data.url || data.path || data.filePath || null
       setIdentityForm((f) => ({ ...f, faviconPath: newFaviconPath }))
       setFaviconFile(null)
       if (faviconInputRef.current) faviconInputRef.current.value = ''
-      // Save settings with the new favicon path
+      // Save settings with the new favicon path + PWA icon paths
       const saveRes = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -407,6 +432,8 @@ export function AdminSettings() {
           appName: identityForm.appName,
           logoPath: identityForm.logoPath,
           faviconPath: newFaviconPath,
+          pwaIcon192Path: data.pwaIcon192 || null,
+          pwaIcon512Path: data.pwaIcon512 || null,
         }),
       })
       if (saveRes.ok) {
@@ -568,6 +595,14 @@ export function AdminSettings() {
             >
               <CalendarDays className="size-4 mr-1.5" />
               Hari Libur
+            </TabsTrigger>
+            <TabsTrigger
+              value="storage"
+              className="data-[state=active]:bg-[#1e40af] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/25 text-sm px-4 py-2"
+              onClick={() => fetchBlobStats()}
+            >
+              <HardDrive className="size-4 mr-1.5" />
+              Penyimpanan
             </TabsTrigger>
           </TabsList>
 
@@ -984,6 +1019,151 @@ export function AdminSettings() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* =============================================================== */}
+          {/* Tab: Penyimpanan (Blob Storage)                                 */}
+          {/* =============================================================== */}
+          <TabsContent value="storage">
+            <Card className="bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border-blue-100/50 dark:border-blue-900/30 shadow-lg shadow-blue-500/5">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-[#1e40af] dark:text-blue-300 flex items-center gap-2">
+                      <HardDrive className="size-5" />
+                      Penyimpanan File
+                    </CardTitle>
+                    <CardDescription>
+                      Statistik penggunaan penyimpanan blob untuk file yang diupload
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchBlobStats()}
+                    disabled={isLoadingBlobStats}
+                    className="border-blue-100/50 dark:border-blue-900/30"
+                  >
+                    <RefreshCw className={`size-3.5 mr-1.5 ${isLoadingBlobStats ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {isLoadingBlobStats && !blobStats ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : blobStats ? (
+                  <>
+                    {/* Total Summary */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-xl bg-[#1e40af]/5 dark:bg-blue-900/20 border border-[#1e40af]/10 dark:border-blue-800/30">
+                        <p className="text-xs text-muted-foreground mb-1">Total File</p>
+                        <p className="text-2xl font-bold text-[#1e40af] dark:text-blue-300">
+                          {blobStats.total.count}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-emerald-500/5 dark:bg-emerald-900/20 border border-emerald-500/10 dark:border-emerald-800/30">
+                        <p className="text-xs text-muted-foreground mb-1">Total Ukuran</p>
+                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                          {blobStats.total.size < 1024
+                            ? `${blobStats.total.size} B`
+                            : blobStats.total.size < 1024 * 1024
+                            ? `${(blobStats.total.size / 1024).toFixed(1)} KB`
+                            : `${(blobStats.total.size / (1024 * 1024)).toFixed(1)} MB`}
+                        </p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-amber-500/5 dark:bg-amber-900/20 border border-amber-500/10 dark:border-amber-800/30">
+                        <p className="text-xs text-muted-foreground mb-1">Kategori</p>
+                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          {Object.keys(blobStats.categories).length}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Separator className="bg-blue-50 dark:bg-blue-900/20" />
+
+                    {/* Category breakdown */}
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-foreground">Detail per Kategori</p>
+                      {Object.entries(blobStats.categories).map(([category, stats]) => {
+                        const categoryLabels: Record<string, string> = {
+                          logo: 'Logo Aplikasi',
+                          favicon: 'Favicon',
+                          attendance: 'Foto Absensi',
+                          'bukti-dukung': 'Bukti Dukung',
+                          attachment: 'Lampiran Izin/Cuti',
+                          profile: 'Foto Profil',
+                          'pwa-icon': 'Ikon PWA',
+                        }
+                        const categoryIcons: Record<string, string> = {
+                          logo: '🏷️',
+                          favicon: '⭐',
+                          attendance: '📸',
+                          'bukti-dukung': '📄',
+                          attachment: '📎',
+                          profile: '👤',
+                          'pwa-icon': '📱',
+                        }
+                        const label = categoryLabels[category] || category
+                        const icon = categoryIcons[category] || '📁'
+                        const sizeStr =
+                          stats.totalSize < 1024
+                            ? `${stats.totalSize} B`
+                            : stats.totalSize < 1024 * 1024
+                            ? `${(stats.totalSize / 1024).toFixed(1)} KB`
+                            : `${(stats.totalSize / (1024 * 1024)).toFixed(1)} MB`
+
+                        return (
+                          <div
+                            key={category}
+                            className="flex items-center justify-between p-3 rounded-xl border border-blue-100/50 dark:border-blue-900/30 bg-white/50 dark:bg-gray-800/30 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{icon}</span>
+                              <div>
+                                <p className="text-sm font-medium text-foreground">{label}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{category}/</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-foreground">
+                                {stats.count} file
+                              </p>
+                              <p className="text-xs text-muted-foreground">{sizeStr}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Info banner */}
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30">
+                      <HardDrive className="size-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                      <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                        <p>
+                          File disimpan secara lokal di folder <code className="px-1 py-0.5 bg-blue-100 dark:bg-blue-900/40 rounded text-[10px] font-mono">blobs/</code> pada server.
+                        </p>
+                        <p>
+                          Tidak diperlukan konfigurasi cloud storage — mudah di-deploy tanpa pengaturan tambahan.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                    <HardDrive className="size-10 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">Gagal memuat statistik penyimpanan</p>
+                    <Button variant="outline" size="sm" onClick={() => fetchBlobStats()}>
+                      Coba Lagi
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </motion.div>
